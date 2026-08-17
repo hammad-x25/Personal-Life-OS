@@ -2,8 +2,9 @@ import Expense from "../models/Expense.js";
 import Task from "../models/Task.js";
 import Goal from "../models/Goal.js";
 import Habit from "../models/Habit.js";
+import TimetableEvent from "../models/TimetableEvent.js";
 import { ok, AppError } from "../utils/api.js";
-const models = { expenses: Expense, tasks: Task, goals: Goal, habits: Habit };
+const models = { expenses: Expense, tasks: Task, goals: Goal, habits: Habit, timetable: TimetableEvent };
 export const list = (key) => async (req, res) =>
   ok(
     res,
