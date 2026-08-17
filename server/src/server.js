@@ -1,0 +1,1 @@
+import app from './app.js'; import { connectDatabase } from './db.js'; import { env } from './config/env.js'; await connectDatabase(); app.listen(env.port, () => console.log(`Life OS API listening on http://localhost:${env.port}`));

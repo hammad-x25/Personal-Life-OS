@@ -1,0 +1,1 @@
+export function errorHandler(err, req, res, next) { const status = err.status || 500; res.status(status).json({ success: false, code: err.code || 'INTERNAL_ERROR', message: status === 500 ? 'Internal server error' : err.message, details: err.details || null }); }
