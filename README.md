@@ -14,6 +14,10 @@ A local-first MERN personal operating system for planning, recording, measuring,
 - Expenses, tasks, goals, and habits API models
 - Soft deletion for historical integrity
 - Seed data for a demo account
+- Backend dashboard aggregation and deterministic daily score snapshots
+- Finance summaries, projects, project milestones, timeline events, and historical analytics APIs
+- Server-side AI review service with local fallback and validated structured output
+- Search across tasks, goals, habits, projects, expenses, and timeline events
 
 ## Requirements
 

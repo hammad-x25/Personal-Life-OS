@@ -12,7 +12,7 @@ import {
   PlaceholderPage,
 } from "./pages/CorePages.jsx";
 import { ExercisePage, PhoneUsagePage } from "./pages/Phase3Pages.jsx";
-import { CommandDashboard, FinancePage, ProjectsPage, AnalyticsPage, TimelinePage, ReviewsPage, SettingsPage } from "./pages/ExtendedPages.jsx";
+import { CommandDashboard, FinancePage, ProjectsPage, WorkPage, AnalyticsPage, TimelinePage, ReviewsPage, SettingsPage, AccountabilityHistoryPage } from "./pages/ExtendedPages.jsx";
 
 const today = () =>
   new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Karachi" }).format(
@@ -104,6 +104,8 @@ function Accountability({ status }) {
   const [dateIndex, setDateIndex] = useState(0);
   const [minutes, setMinutes] = useState("");
   const [error, setError] = useState("");
+  const [preview, setPreview] = useState(null);
+  const [missingExpense, setMissingExpense] = useState({ amount: "", category: "Food", description: "" });
   const dispatch = useDispatch();
   const dates = [
     ...new Set([
@@ -141,6 +143,16 @@ function Accountability({ status }) {
     status.requirements.phoneUsage.requiredDates.includes(dateKey);
   const spendingNeeded =
     status.requirements.spending.requiredDates.includes(dateKey);
+  useEffect(() => {
+    if (dateKey && spendingNeeded) api.get(`/spending-accountability/${dateKey}/preview`).then(r => setPreview(r.data.data)).catch(() => setPreview(null));
+  }, [dateKey, spendingNeeded]);
+  async function addMissingExpense() {
+    try {
+      await api.post(`/spending-accountability/${dateKey}/add-expense`, { ...missingExpense, amount: Number(missingExpense.amount) });
+      setMissingExpense({ amount: "", category: "Food", description: "" });
+      const r = await api.get(`/spending-accountability/${dateKey}/preview`); setPreview(r.data.data);
+    } catch (e) { setError(e.response?.data?.message || "Could not add missing expense"); }
+  }
   return (
     <main className="auth">
       <div className="gate-card">
@@ -167,9 +179,15 @@ function Accountability({ status }) {
             {spendingNeeded ? "○" : "✓"} Spending{" "}
             {spendingNeeded && (
               <div className="actions">
+                <p className="muted">Recorded total: Rs. {Number(preview?.totalSpent || 0).toLocaleString()} ({preview?.expenseCount || 0} transactions)</p>
                 <button onClick={() => spending("confirm")}>
                   Confirm recorded spending
                 </button>
+                <div className="inline-form">
+                  <input type="number" min="0.01" placeholder="Missing amount" value={missingExpense.amount} onChange={e => setMissingExpense({ ...missingExpense, amount: e.target.value })} />
+                  <input placeholder="Category" value={missingExpense.category} onChange={e => setMissingExpense({ ...missingExpense, category: e.target.value })} />
+                  <button className="secondary" onClick={addMissingExpense}>Add missing expense</button>
+                </div>
                 <button
                   className="secondary"
                   onClick={() => spending("no-spending")}
@@ -214,6 +232,9 @@ function Shell() {
   const dispatch = useDispatch();
   const user = useSelector((s) => s.auth.user);
   const nav = useNavigate();
+  const [search, setSearch] = useState("");
+  const [results, setResults] = useState([]);
+  async function runSearch(value) { setSearch(value); if (value.trim().length < 2) return setResults([]); try { setResults((await api.get(`/search?q=${encodeURIComponent(value)}`)).data.data); } catch { setResults([]); } }
   async function logout() {
     await api.post("/auth/logout");
     dispatch(clearUser());
@@ -236,10 +257,12 @@ function Shell() {
           <Link to="/app/phone-usage">Phone & check-in</Link>
           <Link to="/app/finance">Finance</Link>
           <Link to="/app/projects">Projects</Link>
+          <Link to="/app/work">Work</Link>
           <Link to="/app/analytics">Analytics</Link>
           <Link to="/app/timeline">Timeline</Link>
           <Link to="/app/reviews">AI reviews</Link>
           <Link to="/app/settings">Settings</Link>
+          <Link to="/app/accountability-history">Spending history</Link>
         </nav>
         <button className="logout" onClick={logout}>
           Log out
@@ -251,6 +274,7 @@ function Shell() {
             <span className="eyebrow">{today()}</span>
             <h2>Good morning, {user?.name?.split(" ")[0] || "friend"}.</h2>
           </div>
+          <div className="search-box"><input placeholder="Search Life OS" value={search} onChange={e => runSearch(e.target.value)} />{results.length > 0 && <div className="search-results">{results.map(item => <div key={`${item.type}-${item.id}`}><small>{item.type}</small> {item.title}</div>)}</div>}</div>
           <div className="avatar">{user?.name?.[0] || "U"}</div>
         </header>
         <Routes>
@@ -263,10 +287,12 @@ function Shell() {
           <Route path="phone-usage" element={<PhoneUsagePage />} />
           <Route path="finance" element={<FinancePage />} />
           <Route path="projects" element={<ProjectsPage />} />
+          <Route path="work" element={<WorkPage />} />
           <Route path="analytics" element={<AnalyticsPage />} />
           <Route path="timeline" element={<TimelinePage />} />
           <Route path="reviews" element={<ReviewsPage />} />
           <Route path="settings" element={<SettingsPage />} />
+          <Route path="accountability-history" element={<AccountabilityHistoryPage />} />
           <Route path="*" element={<Dashboard />} />
         </Routes>
       </section>

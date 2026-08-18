@@ -16,6 +16,7 @@ import {
   exerciseLogSchema,
   projectSchema,
   milestoneSchema,
+  habitLogSchema,
 } from "../validators/schemas.js";
 import * as auth from "../controllers/auth.controller.js";
 import * as access from "../controllers/access.controller.js";
@@ -24,6 +25,8 @@ import * as exercise from "../controllers/exercise.controller.js";
 import * as analytics from "../controllers/analytics.controller.js";
 import * as project from "../controllers/project.controller.js";
 import * as review from "../controllers/review.controller.js";
+import * as search from "../controllers/search.controller.js";
+import * as habit from "../controllers/habit.controller.js";
 const router = Router();
 router.post(
   "/auth/register",
@@ -42,6 +45,7 @@ router.post(
   asyncHandler(access.submitPhoneUsage),
 );
 router.get("/check-ins/history", asyncHandler(access.phoneHistory));
+router.get("/spending-accountability/history", asyncHandler(access.spendingHistory));
 router.get(
   "/spending-accountability/:dateKey/preview",
   asyncHandler(access.spendingPreview),
@@ -92,6 +96,8 @@ for (const [path, key] of [
     asyncHandler(crud.remove(key)),
   );
 }
+router.post("/habits/:id/log", requireAccountability, validate(habitLogSchema), asyncHandler(habit.log));
+router.get("/habits/:id/history", requireAccountability, asyncHandler(habit.history));
 router.get(
   "/exercise/plans",
   requireAccountability,
@@ -133,6 +139,7 @@ router.get("/analytics/growth", requireAccountability, asyncHandler(analytics.gr
 router.get("/analytics/finance", requireAccountability, asyncHandler(analytics.finance));
 router.get("/analytics/periods", requireAccountability, asyncHandler(analytics.currentPeriods));
 router.get("/timeline", requireAccountability, asyncHandler(analytics.timeline));
+router.get("/search", requireAccountability, asyncHandler(search.search));
 router.get("/projects", requireAccountability, asyncHandler(project.list));
 router.post("/projects", requireAccountability, validate(projectSchema), asyncHandler(project.create));
 router.patch("/projects/:id", requireAccountability, validate(projectSchema.partial()), asyncHandler(project.update));

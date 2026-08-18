@@ -1,2 +1,31 @@
-import express from 'express'; import cors from 'cors'; import cookieParser from 'cookie-parser'; import rateLimit from 'express-rate-limit'; import { env } from './config/env.js'; import routes from './routes/index.js'; import { errorHandler } from './middleware/error.js';
-const app = express(); app.use(cors({ origin: env.clientUrl, credentials: true })); app.use(express.json({ limit: '1mb' })); app.use(cookieParser()); app.use(rateLimit({ windowMs: 60000, limit: 120 })); app.get('/health', (req, res) => res.json({ success: true, data: { status: 'ok', timestamp: new Date().toISOString() } })); app.use('/api', routes); app.use((req, res) => res.status(404).json({ success: false, code: 'NOT_FOUND', message: `Route not found: ${req.method} ${req.path}`, details: null })); app.use(errorHandler); export default app;
+import express from "express";
+import cors from "cors";
+import cookieParser from "cookie-parser";
+import rateLimit from "express-rate-limit";
+import { env } from "./config/env.js";
+import routes from "./routes/index.js";
+import { errorHandler } from "./middleware/error.js";
+const app = express();
+app.use(cors({ origin: env.clientUrl, credentials: true }));
+app.use(express.json({ limit: "1mb" }));
+app.use(cookieParser());
+app.use(rateLimit({ windowMs: 60000, limit: 120 }));
+app.get("/health", (req, res) =>
+  res.json({
+    success: true,
+    data: { status: "ok", timestamp: new Date().toISOString() },
+  }),
+);
+app.use("/api", routes);
+app.use((req, res) =>
+  res
+    .status(404)
+    .json({
+      success: false,
+      code: "NOT_FOUND",
+      message: `Route not found: ${req.method} ${req.path}`,
+      details: null,
+    }),
+);
+app.use(errorHandler);
+export default app;
