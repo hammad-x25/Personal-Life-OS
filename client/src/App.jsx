@@ -12,7 +12,7 @@ import {
   PlaceholderPage,
 } from "./pages/CorePages.jsx";
 import { ExercisePage, PhoneUsagePage } from "./pages/Phase3Pages.jsx";
-import { CommandDashboard, FinancePage, ProjectsPage, WorkPage, AnalyticsPage, TimelinePage, ReviewsPage, SettingsPage, AccountabilityHistoryPage } from "./pages/ExtendedPages.jsx";
+import { CommandDashboard, FinancePage, ProjectsPage, WorkPage, AnalyticsPage, TimelinePage, ReviewsPage, SettingsPage, AccountabilityHistoryPage, NotificationsPage } from "./pages/ExtendedPages.jsx";
 
 const today = () =>
   new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Karachi" }).format(
@@ -234,6 +234,7 @@ function Shell() {
   const nav = useNavigate();
   const [search, setSearch] = useState("");
   const [results, setResults] = useState([]);
+  useEffect(() => { const theme = user?.settings?.theme || 'dark'; document.body.dataset.theme = theme; return () => { delete document.body.dataset.theme; }; }, [user]);
   async function runSearch(value) { setSearch(value); if (value.trim().length < 2) return setResults([]); try { setResults((await api.get(`/search?q=${encodeURIComponent(value)}`)).data.data); } catch { setResults([]); } }
   async function logout() {
     await api.post("/auth/logout");
@@ -263,6 +264,7 @@ function Shell() {
           <Link to="/app/reviews">AI reviews</Link>
           <Link to="/app/settings">Settings</Link>
           <Link to="/app/accountability-history">Spending history</Link>
+          <Link to="/app/notifications">Notifications</Link>
         </nav>
         <button className="logout" onClick={logout}>
           Log out
@@ -293,6 +295,7 @@ function Shell() {
           <Route path="reviews" element={<ReviewsPage />} />
           <Route path="settings" element={<SettingsPage />} />
           <Route path="accountability-history" element={<AccountabilityHistoryPage />} />
+          <Route path="notifications" element={<NotificationsPage />} />
           <Route path="*" element={<Dashboard />} />
         </Routes>
       </section>
