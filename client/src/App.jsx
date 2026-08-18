@@ -11,6 +11,8 @@ import {
   TimetablePage,
   PlaceholderPage,
 } from "./pages/CorePages.jsx";
+import { ExercisePage, PhoneUsagePage } from "./pages/Phase3Pages.jsx";
+import { CommandDashboard, FinancePage, ProjectsPage, AnalyticsPage, TimelinePage, ReviewsPage, SettingsPage } from "./pages/ExtendedPages.jsx";
 
 const today = () =>
   new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Karachi" }).format(
@@ -230,8 +232,14 @@ function Shell() {
           <Link to="/app/goals">Goals</Link>
           <Link to="/app/habits">Habits</Link>
           <Link to="/app/timetable">Timetable</Link>
+          <Link to="/app/exercise">Exercise</Link>
+          <Link to="/app/phone-usage">Phone & check-in</Link>
           <Link to="/app/finance">Finance</Link>
+          <Link to="/app/projects">Projects</Link>
           <Link to="/app/analytics">Analytics</Link>
+          <Link to="/app/timeline">Timeline</Link>
+          <Link to="/app/reviews">AI reviews</Link>
+          <Link to="/app/settings">Settings</Link>
         </nav>
         <button className="logout" onClick={logout}>
           Log out
@@ -246,16 +254,19 @@ function Shell() {
           <div className="avatar">{user?.name?.[0] || "U"}</div>
         </header>
         <Routes>
-          <Route index element={<Dashboard />} />
+          <Route index element={<CommandDashboard />} />
           <Route path="tasks" element={<TasksPage />} />
           <Route path="goals" element={<GoalsPage />} />
           <Route path="habits" element={<HabitsPage />} />
           <Route path="timetable" element={<TimetablePage />} />
-          <Route path="finance" element={<PlaceholderPage title="Finance" />} />
-          <Route
-            path="analytics"
-            element={<PlaceholderPage title="Analytics" />}
-          />
+          <Route path="exercise" element={<ExercisePage />} />
+          <Route path="phone-usage" element={<PhoneUsagePage />} />
+          <Route path="finance" element={<FinancePage />} />
+          <Route path="projects" element={<ProjectsPage />} />
+          <Route path="analytics" element={<AnalyticsPage />} />
+          <Route path="timeline" element={<TimelinePage />} />
+          <Route path="reviews" element={<ReviewsPage />} />
+          <Route path="settings" element={<SettingsPage />} />
           <Route path="*" element={<Dashboard />} />
         </Routes>
       </section>

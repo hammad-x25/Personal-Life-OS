@@ -8,4 +8,7 @@ export const env = {
   accessExpiry: process.env.ACCESS_TOKEN_EXPIRY || "15m",
   refreshExpiry: process.env.REFRESH_TOKEN_EXPIRY || "30d",
   clientUrl: process.env.CLIENT_URL || "http://localhost:5173",
+  aiApiKey: process.env.AI_API_KEY || '',
+  aiApiUrl: process.env.AI_API_URL || '',
+  aiModel: process.env.AI_MODEL || '',
 };
