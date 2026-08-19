@@ -6,6 +6,8 @@ import ExerciseLog from '../models/ExerciseLog.js';
 import PhoneUsage from '../models/PhoneUsage.js';
 import TimetableEvent from '../models/TimetableEvent.js';
 import Project from '../models/Project.js';
+import Budget from '../models/Budget.js';
+import FinancialGoal from '../models/FinancialGoal.js';
 import DailyPerformance from '../models/DailyPerformance.js';
 import SpendingAccountability from '../models/SpendingAccountability.js';
 import { dateKeyInTimezone, dateKeysBetween, shiftDateKey, weekPeriod, monthPeriod } from '../utils/dates.js';
@@ -41,13 +43,16 @@ export async function growth(user, startDateKey, endDateKey) {
 
 export async function financeSummary(user, startDateKey, endDateKey) {
   const match = { userId: user._id, dateKey: { $gte: startDateKey, $lte: endDateKey }, deletedAt: null };
-  const [totals, categories, trend, accountability] = await Promise.all([
+  const [totals, categories, trend, accountability, budgets, financialGoals] = await Promise.all([
     Expense.aggregate([{ $match: match }, { $group: { _id: '$type', total: { $sum: '$amount' }, count: { $sum: 1 } } }]),
     Expense.aggregate([{ $match: { ...match, type: 'EXPENSE' } }, { $group: { _id: '$category', total: { $sum: '$amount' } } }, { $sort: { total: -1 } }]),
     Expense.aggregate([{ $match: { ...match, type: 'EXPENSE' } }, { $group: { _id: '$dateKey', total: { $sum: '$amount' } } }, { $sort: { _id: 1 } }]),
-    SpendingAccountability.countDocuments({ userId: user._id, dateKey: { $gte: startDateKey, $lte: endDateKey }, status: 'ACCOUNTED' })
+    SpendingAccountability.countDocuments({ userId: user._id, dateKey: { $gte: startDateKey, $lte: endDateKey }, status: 'ACCOUNTED' }),
+    Budget.find({ userId: user._id, active: true, deletedAt: null }).select('name category amount currency periodType'),
+    FinancialGoal.find({ userId: user._id, status: { $in: ['ACTIVE', 'COMPLETED'] }, deletedAt: null }).select('title targetAmount currentAmount currency deadlineKey status')
   ]);
-  return { totals, categories, trend, accountabilityDays: accountability };
+  const budgetRows = budgets.map(budget => { const spent = budget.category ? (categories.find(item => item._id === budget.category)?.total || 0) : (totals.find(item => item._id === 'EXPENSE')?.total || 0); return { ...budget.toObject(), spent, remaining: budget.amount - spent, usagePercentage: budget.amount ? spent / budget.amount * 100 : 0 }; });
+  return { totals, categories, trend, accountabilityDays: accountability, budgets: budgetRows, financialGoals };
 }
 
 export async function dashboardPeriod(user, type) {

@@ -73,6 +73,8 @@ export function FinancePage() {
     type: "EXPENSE",
   });
   const [error, setError] = useState(null);
+  const [budgetForm, setBudgetForm] = useState({ name: "Monthly spending", category: "", amount: "" });
+  const [goalForm, setGoalForm] = useState({ title: "", targetAmount: "", deadlineKey: "" });
   async function load() {
     try {
       const [expenses, finance] = await Promise.all([
@@ -98,6 +100,8 @@ export function FinancePage() {
       setError(e);
     }
   }
+  async function createBudget(e) { e.preventDefault(); try { await api.post('/budgets', { ...budgetForm, amount: Number(budgetForm.amount), category: budgetForm.category || null, periodType: 'MONTHLY' }); setBudgetForm({ name: 'Monthly spending', category: '', amount: '' }); await load(); } catch (e) { setError(e); } }
+  async function createGoal(e) { e.preventDefault(); try { await api.post('/finance-goals', { ...goalForm, targetAmount: Number(goalForm.targetAmount) }); setGoalForm({ title: '', targetAmount: '', deadlineKey: '' }); await load(); } catch (e) { setError(e); } }
   const total = summary?.totals?.find((x) => x._id === "EXPENSE")?.total || 0;
   return (
     <div>
@@ -149,6 +153,7 @@ export function FinancePage() {
           <button>Record</button>
         </form>
       </section>
+      <div className="dashboard-columns"><section className="panel"><span className="eyebrow">OPTIONAL BUDGET</span><form className="grid-form" onSubmit={createBudget}><input required placeholder="Budget name" value={budgetForm.name} onChange={e => setBudgetForm({ ...budgetForm, name: e.target.value })} /><input placeholder="Category or blank for all" value={budgetForm.category} onChange={e => setBudgetForm({ ...budgetForm, category: e.target.value })} /><input type="number" min="0.01" required placeholder="Monthly amount" value={budgetForm.amount} onChange={e => setBudgetForm({ ...budgetForm, amount: e.target.value })} /><button>Set budget</button></form>{summary?.budgets?.map(item => <div className="goal-row" key={item._id}><div><strong>{item.name}</strong><small>Rs. {Number(item.spent).toLocaleString()} / {Number(item.amount).toLocaleString()}</small></div><div className="progress"><span style={{ width: `${Math.min(100, item.usagePercentage)}%` }} /></div></div>)}</section><section className="panel"><span className="eyebrow">FINANCIAL GOAL</span><form className="grid-form" onSubmit={createGoal}><input required placeholder="Goal title" value={goalForm.title} onChange={e => setGoalForm({ ...goalForm, title: e.target.value })} /><input type="number" min="0.01" required placeholder="Target amount" value={goalForm.targetAmount} onChange={e => setGoalForm({ ...goalForm, targetAmount: e.target.value })} /><input type="date" value={goalForm.deadlineKey} onChange={e => setGoalForm({ ...goalForm, deadlineKey: e.target.value })} /><button>Create goal</button></form>{summary?.financialGoals?.map(item => <div className="goal-row" key={item._id}><div><strong>{item.title}</strong><small>Rs. {Number(item.currentAmount).toLocaleString()} / {Number(item.targetAmount).toLocaleString()}</small></div><div className="progress"><span style={{ width: `${Math.min(100, item.currentAmount / item.targetAmount * 100)}%` }} /></div></div>)}</section></div>
       <section className="panel">
         <span className="eyebrow">RECENT RECORDS</span>
         {items.slice(0, 20).map((x) => (

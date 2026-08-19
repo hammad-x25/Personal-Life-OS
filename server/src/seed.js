@@ -16,6 +16,8 @@ import ExerciseLog from './models/ExerciseLog.js';
 import TimetableEvent from './models/TimetableEvent.js';
 import DailyPerformance from './models/DailyPerformance.js';
 import TimelineEvent from './models/TimelineEvent.js';
+import Budget from './models/Budget.js';
+import FinancialGoal from './models/FinancialGoal.js';
 
 await connectDatabase();
 const timezone = 'Asia/Karachi';
@@ -26,7 +28,7 @@ const user = await User.findOneAndUpdate(
   { upsert: true, new: true }
 );
 
-const owned = [Task, Goal, Habit, HabitLog, Expense, PhoneUsage, SpendingAccountability, Project, ProjectMilestone, ExercisePlan, ExerciseLog, TimetableEvent, DailyPerformance, TimelineEvent];
+const owned = [Task, Goal, Habit, HabitLog, Expense, PhoneUsage, SpendingAccountability, Project, ProjectMilestone, ExercisePlan, ExerciseLog, TimetableEvent, DailyPerformance, TimelineEvent, Budget, FinancialGoal];
 for (const Model of owned) await Model.deleteMany({ userId: user._id });
 
 const dates = Array.from({ length: 14 }, (_, index) => shiftDateKey(today, -13 + index));
@@ -34,6 +36,8 @@ const habit = await Habit.create({ userId: user._id, title: 'Read', dailyTarget:
 const project = await Project.create({ userId: user._id, name: 'Personal Life OS', description: 'Build a measurable personal operating system.', status: 'ACTIVE', priority: 'HIGH', startDateKey: dates[0], deadlineKey: shiftDateKey(today, 30) });
 await ProjectMilestone.create([{ userId: user._id, projectId: project._id, title: 'Foundation complete', dateKey: dates[3], completed: true, completedAt: new Date() }, { userId: user._id, projectId: project._id, title: 'Analytics complete', dateKey: shiftDateKey(today, 7), completed: false }]);
 await Goal.create({ userId: user._id, title: 'Build Personal Life OS', target: 100, currentProgress: 42, unit: '%', priority: 'HIGH', deadlineKey: shiftDateKey(today, 30) });
+await Budget.create({ userId: user._id, name: 'Monthly essentials', category: null, periodType: 'MONTHLY', amount: 25000, currency: 'PKR', active: true });
+await FinancialGoal.create({ userId: user._id, title: 'Buy a laptop', targetAmount: 200000, currentAmount: 75000, currency: 'PKR', deadlineKey: shiftDateKey(today, 120), status: 'ACTIVE', contributions: [{ amount: 75000, dateKey: dates[0], note: 'Seed starting balance' }] });
 await Task.insertMany([
   { userId: user._id, title: 'Review backend architecture', status: 'COMPLETED', priority: 'HIGH', dueDateKey: today, category: 'WORK', completedAt: new Date() },
   { userId: user._id, title: 'Plan tomorrow', status: 'TODO', priority: 'MEDIUM', dueDateKey: today },
