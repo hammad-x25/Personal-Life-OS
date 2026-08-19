@@ -540,15 +540,11 @@ export function NotificationsPage() {
 export function AnalyticsPage() {
   const [daily, setDaily] = useState([]);
   const [growth, setGrowth] = useState(null);
+  const [period, setPeriod] = useState(null);
+  const [correlation, setCorrelation] = useState(null);
+  const [range, setRange] = useState('WEEKLY');
   const [error, setError] = useState(null);
-  useEffect(() => {
-    Promise.all([api.get("/analytics/daily"), api.get("/analytics/growth")])
-      .then(([d, g]) => {
-        setDaily(d.data.data);
-        setGrowth(g.data.data);
-      })
-      .catch(setError);
-  }, []);
+  useEffect(() => { Promise.all([api.get("/analytics/daily"), api.get("/analytics/growth"), api.get(`/dashboard/${range.toLowerCase()}`), api.get("/analytics/correlations")]).then(([d, g, p, c]) => { setDaily(d.data.data); setGrowth(g.data.data); setPeriod(p.data.data); setCorrelation(c.data.data); }).catch(setError); }, [range]);
   return (
     <div>
       <Header
@@ -556,6 +552,7 @@ export function AnalyticsPage() {
         description="See what you planned, what happened, and how the trend is moving."
       />
       <ErrorBox error={error} />
+      <div className="actions"><button className={range === 'WEEKLY' ? '' : 'secondary'} onClick={() => setRange('WEEKLY')}>Weekly</button><button className={range === 'MONTHLY' ? '' : 'secondary'} onClick={() => setRange('MONTHLY')}>Monthly</button></div>
       <div className="grid">
         <div className="card">
           <span className="eyebrow">CURRENT AVERAGE</span>
@@ -573,11 +570,13 @@ export function AnalyticsPage() {
           </strong>
           <p className="muted">Compared with previous period</p>
         </div>
+        <div className="card"><span className="eyebrow">PERIOD SCORE</span><strong>{period?.score == null ? '—' : `${Math.round(period.score)}%`}</strong><p className="muted">{range.toLowerCase()} performance</p></div>
       </div>
       <section className="panel">
         <span className="eyebrow">PRODUCTIVITY OVER TIME</span>
         <Chart data={daily} />
       </section>
+      <section className="panel"><span className="eyebrow">CORRELATION OBSERVATIONS</span>{correlation?.observations?.map(item => <div className="mini-row" key={item.type}><span className="dot green" /><span>{item.message}</span><small>{item.type === 'PHONE_USAGE' ? `${item.lowUsageAverage == null ? '—' : Math.round(item.lowUsageAverage)}% vs ${item.highUsageAverage == null ? '—' : Math.round(item.highUsageAverage)}%` : `${item.exerciseAverage == null ? '—' : Math.round(item.exerciseAverage)}% with exercise`}</small></div>)}</section>
     </div>
   );
 }
