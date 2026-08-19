@@ -1,10 +1,331 @@
-import { useEffect, useState } from 'react'; import { Routes, Route, Navigate, Link, useNavigate } from 'react-router-dom'; import { useDispatch, useSelector } from 'react-redux'; import { api } from './api.js'; import { setAccess, setUser, clearUser } from './store.js';
-const today = () => new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Karachi' }).format(new Date());
-function Auth({ mode }) { const [form, setForm] = useState({ name: '', email: '', password: '' }); const [error, setError] = useState(''); const dispatch = useDispatch(); const nav = useNavigate(); async function submit(e) { e.preventDefault(); try { const r = await api.post(`/auth/${mode}`, form); dispatch(setUser(r.data.data.user)); nav('/app'); } catch (e) { setError(e.response?.data?.message || 'Unable to continue'); } } return <main className="auth"><div className="auth-card"><span className="eyebrow">PERSONAL LIFE OS</span><h1>{mode === 'login' ? 'Welcome back.' : 'Start your operating system.'}</h1><p className="muted">Plan clearly. Record honestly. Improve visibly.</p><form onSubmit={submit}>{mode === 'register' && <input placeholder="Name" required value={form.name} onChange={e => setForm({ ...form, name: e.target.value })} />}<input type="email" placeholder="Email" required value={form.email} onChange={e => setForm({ ...form, email: e.target.value })} /><input type="password" minLength="8" placeholder="Password" required value={form.password} onChange={e => setForm({ ...form, password: e.target.value })} /><button>{mode === 'login' ? 'Log in' : 'Create account'}</button></form>{error && <p className="error">{error}</p>}<Link to={mode === 'login' ? '/register' : '/login'}>{mode === 'login' ? 'Create an account' : 'Already have an account?'}</Link></div></main> }
-function Gate({ children }) { const dispatch = useDispatch(); const status = useSelector(s => s.access.status); const [loading, setLoading] = useState(true); useEffect(() => { api.get('/access/status').then(r => dispatch(setAccess(r.data.data))).catch(() => {}).finally(() => setLoading(false)); }, [dispatch]); if (loading || !status) return <div className="center">Checking today’s accountability…</div>; if (!status.unlocked) return <Accountability status={status} />; return children; }
-function Accountability({ status }) { const [dateIndex, setDateIndex] = useState(0); const [minutes, setMinutes] = useState(''); const [error, setError] = useState(''); const nav = useNavigate(); const dispatch = useDispatch(); const dates = [...new Set([...(status.requirements.phoneUsage.requiredDates || []), ...(status.requirements.spending.requiredDates || [])])].sort(); const dateKey = dates[dateIndex]; async function refresh() { const r = await api.get('/access/status'); dispatch(setAccess(r.data.data)); } async function phone() { try { await api.post('/check-ins/phone', { dateKey, phoneUsageMinutes: Number(minutes) }); setMinutes(''); await refresh(); } catch (e) { setError(e.response?.data?.message || 'Could not save phone usage'); } } async function spending(path) { try { await api.post(`/spending-accountability/${dateKey}/${path}`); await refresh(); } catch (e) { setError(e.response?.data?.message || 'Could not save spending'); } } if (!dateKey) return <div className="center">Loading requirements…</div>; const phoneNeeded = status.requirements.phoneUsage.requiredDates.includes(dateKey); const spendingNeeded = status.requirements.spending.requiredDates.includes(dateKey); return <main className="auth"><div className="gate-card"><span className="eyebrow">DAILY ACCOUNTABILITY</span><h1>Close the loop.</h1><p className="muted">Before continuing, account for {dateKey}.</p><div className="requirements"><div className={phoneNeeded ? 'requirement' : 'requirement done'}>{phoneNeeded ? '○' : '✓'} Phone usage {phoneNeeded && <><input type="number" min="0" placeholder="Minutes" value={minutes} onChange={e => setMinutes(e.target.value)} /><button onClick={phone}>Save</button></>}</div><div className={spendingNeeded ? 'requirement' : 'requirement done'}>{spendingNeeded ? '○' : '✓'} Spending {spendingNeeded && <div className="actions"><button onClick={() => spending('confirm')}>Confirm recorded spending</button><button className="secondary" onClick={() => spending('no-spending')}>I spent nothing</button></div>}</div></div>{dates.length > 1 && <div className="pager"><button className="secondary" disabled={dateIndex === 0} onClick={() => setDateIndex(dateIndex - 1)}>Previous</button><span>{dateIndex + 1} / {dates.length}</span><button className="secondary" disabled={dateIndex === dates.length - 1} onClick={() => setDateIndex(dateIndex + 1)}>Next</button></div>}{error && <p className="error">{error}</p>}<button className="secondary" onClick={async () => { await refresh(); nav('/app'); }}>Refresh status</button></div></main> }
-function Shell() { const dispatch = useDispatch(); const user = useSelector(s => s.auth.user); const nav = useNavigate(); async function logout() { await api.post('/auth/logout'); dispatch(clearUser()); nav('/login'); } return <div className="shell"><aside><div className="brand">LIFE<span>OS</span></div><p className="muted small">Your personal operating system</p><nav><Link to="/app">Overview</Link><Link to="/app/tasks">Tasks</Link><Link to="/app/goals">Goals</Link><Link to="/app/habits">Habits</Link><Link to="/app/finance">Finance</Link><Link to="/app/analytics">Analytics</Link></nav><button className="logout" onClick={logout}>Log out</button></aside><section className="content"><header><div><span className="eyebrow">{today()}</span><h2>Good morning, {user?.name?.split(' ')[0] || 'friend'}.</h2></div><div className="avatar">{user?.name?.[0] || 'U'}</div></header><Routes><Route index element={<Dashboard />} /><Route path="*" element={<Dashboard />} /></Routes></section></div> }
-function Dashboard() { return <div><div className="hero"><div><span className="eyebrow">TODAY’S COMMAND CENTER</span><h1>Make the day count.</h1><p className="muted">Your plan becomes useful when it becomes a record.</p></div><button>+ Quick add</button></div><div className="grid"><Card label="PRODUCTIVITY" value="—" detail="Score will appear after your first review" /><Card label="TASKS" value="0 / 0" detail="No tasks planned yet" /><Card label="HABITS" value="0 / 0" detail="Build a consistent baseline" /><Card label="SPENDING" value="Rs. 0" detail="Accountability keeps the picture honest" /></div><div className="panel"><div><span className="eyebrow">START HERE</span><h3>Build your first daily rhythm</h3><p className="muted">Add a task, create a habit, and log your first expense. Your historical performance will grow from these small records.</p></div><div className="progress"><span style={{ width: '15%' }} /></div></div></div> }
-function Card({ label, value, detail }) { return <div className="card"><span className="eyebrow">{label}</span><strong>{value}</strong><p className="muted">{detail}</p></div> }
-function Protected() { const user = useSelector(s => s.auth.user); return user ? <Gate><Shell /></Gate> : <Navigate to="/login" replace />; }
-export default function App() { const dispatch = useDispatch(); const [checking, setChecking] = useState(true); useEffect(() => { api.get('/auth/me').then(r => dispatch(setUser(r.data.data))).catch(() => {}).finally(() => setChecking(false)); }, [dispatch]); if (checking) return <div className="center">Loading Life OS…</div>; return <Routes><Route path="/login" element={<Auth mode="login" />} /><Route path="/register" element={<Auth mode="register" />} /><Route path="/app/*" element={<Protected />} /><Route path="*" element={<Navigate to="/app" replace />} /></Routes>; }
+import { useEffect, useState } from "react";
+import { Routes, Route, Navigate, Link, useNavigate } from "react-router-dom";
+import { useDispatch, useSelector } from "react-redux";
+import { api } from "./api.js";
+import { setAccess, setUser, clearUser } from "./store.js";
+import {
+  Dashboard,
+  TasksPage,
+  GoalsPage,
+  HabitsPage,
+  TimetablePage,
+  PlaceholderPage,
+} from "./pages/CorePages.jsx";
+import { ExercisePage, PhoneUsagePage } from "./pages/Phase3Pages.jsx";
+import { CommandDashboard, FinancePage, ProjectsPage, WorkPage, AnalyticsPage, TimelinePage, ReviewsPage, SettingsPage, AccountabilityHistoryPage } from "./pages/ExtendedPages.jsx";
+
+const today = () =>
+  new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Karachi" }).format(
+    new Date(),
+  );
+
+function Auth({ mode }) {
+  const [form, setForm] = useState({ name: "", email: "", password: "" });
+  const [error, setError] = useState("");
+  const dispatch = useDispatch();
+  const nav = useNavigate();
+  async function submit(e) {
+    e.preventDefault();
+    setError("");
+    try {
+      const r = await api.post(`/auth/${mode}`, form);
+      dispatch(setUser(r.data.data.user));
+      nav("/app");
+    } catch (e) {
+      const response = e.response?.data;
+      setError(
+        response?.message ||
+          (e.code === "ERR_NETWORK"
+            ? "The API is not running. Start it with: npm.cmd run dev:server"
+            : "Unable to continue"),
+      );
+    }
+  }
+  return (
+    <main className="auth">
+      <div className="auth-card">
+        <span className="eyebrow">PERSONAL LIFE OS</span>
+        <h1>
+          {mode === "login" ? "Welcome back." : "Start your operating system."}
+        </h1>
+        <p className="muted">Plan clearly. Record honestly. Improve visibly.</p>
+        <form onSubmit={submit}>
+          {mode === "register" && (
+            <input
+              placeholder="Name"
+              required
+              value={form.name}
+              onChange={(e) => setForm({ ...form, name: e.target.value })}
+            />
+          )}
+          <input
+            type="email"
+            placeholder="Email"
+            required
+            value={form.email}
+            onChange={(e) => setForm({ ...form, email: e.target.value })}
+          />
+          <input
+            type="password"
+            minLength="8"
+            placeholder="Password"
+            required
+            value={form.password}
+            onChange={(e) => setForm({ ...form, password: e.target.value })}
+          />
+          <button>{mode === "login" ? "Log in" : "Create account"}</button>
+        </form>
+        {error && <p className="error">{error}</p>}
+        <Link to={mode === "login" ? "/register" : "/login"}>
+          {mode === "login" ? "Create an account" : "Already have an account?"}
+        </Link>
+      </div>
+    </main>
+  );
+}
+
+function Gate({ children }) {
+  const dispatch = useDispatch();
+  const status = useSelector((s) => s.access.status);
+  const [loading, setLoading] = useState(true);
+  useEffect(() => {
+    api
+      .get("/access/status")
+      .then((r) => dispatch(setAccess(r.data.data)))
+      .catch(() => {})
+      .finally(() => setLoading(false));
+  }, [dispatch]);
+  if (loading || !status)
+    return <div className="center">Checking today’s accountability…</div>;
+  if (!status.unlocked) return <Accountability status={status} />;
+  return children;
+}
+function Accountability({ status }) {
+  const [dateIndex, setDateIndex] = useState(0);
+  const [minutes, setMinutes] = useState("");
+  const [error, setError] = useState("");
+  const [preview, setPreview] = useState(null);
+  const [missingExpense, setMissingExpense] = useState({ amount: "", category: "Food", description: "" });
+  const dispatch = useDispatch();
+  const dates = [
+    ...new Set([
+      ...(status.requirements.phoneUsage.requiredDates || []),
+      ...(status.requirements.spending.requiredDates || []),
+    ]),
+  ].sort();
+  const dateKey = dates[dateIndex];
+  async function refresh() {
+    const r = await api.get("/access/status");
+    dispatch(setAccess(r.data.data));
+  }
+  async function phone() {
+    try {
+      await api.post("/check-ins/phone", {
+        dateKey,
+        phoneUsageMinutes: Number(minutes),
+      });
+      setMinutes("");
+      await refresh();
+    } catch (e) {
+      setError(e.response?.data?.message || "Could not save phone usage");
+    }
+  }
+  async function spending(path) {
+    try {
+      await api.post(`/spending-accountability/${dateKey}/${path}`);
+      await refresh();
+    } catch (e) {
+      setError(e.response?.data?.message || "Could not save spending");
+    }
+  }
+  if (!dateKey) return <div className="center">Loading requirements…</div>;
+  const phoneNeeded =
+    status.requirements.phoneUsage.requiredDates.includes(dateKey);
+  const spendingNeeded =
+    status.requirements.spending.requiredDates.includes(dateKey);
+  useEffect(() => {
+    if (dateKey && spendingNeeded) api.get(`/spending-accountability/${dateKey}/preview`).then(r => setPreview(r.data.data)).catch(() => setPreview(null));
+  }, [dateKey, spendingNeeded]);
+  async function addMissingExpense() {
+    try {
+      await api.post(`/spending-accountability/${dateKey}/add-expense`, { ...missingExpense, amount: Number(missingExpense.amount) });
+      setMissingExpense({ amount: "", category: "Food", description: "" });
+      const r = await api.get(`/spending-accountability/${dateKey}/preview`); setPreview(r.data.data);
+    } catch (e) { setError(e.response?.data?.message || "Could not add missing expense"); }
+  }
+  return (
+    <main className="auth">
+      <div className="gate-card">
+        <span className="eyebrow">DAILY ACCOUNTABILITY</span>
+        <h1>Close the loop.</h1>
+        <p className="muted">Before continuing, account for {dateKey}.</p>
+        <div className="requirements">
+          <div className={phoneNeeded ? "requirement" : "requirement done"}>
+            {phoneNeeded ? "○" : "✓"} Phone usage{" "}
+            {phoneNeeded && (
+              <>
+                <input
+                  type="number"
+                  min="0"
+                  placeholder="Minutes"
+                  value={minutes}
+                  onChange={(e) => setMinutes(e.target.value)}
+                />
+                <button onClick={phone}>Save</button>
+              </>
+            )}
+          </div>
+          <div className={spendingNeeded ? "requirement" : "requirement done"}>
+            {spendingNeeded ? "○" : "✓"} Spending{" "}
+            {spendingNeeded && (
+              <div className="actions">
+                <p className="muted">Recorded total: Rs. {Number(preview?.totalSpent || 0).toLocaleString()} ({preview?.expenseCount || 0} transactions)</p>
+                <button onClick={() => spending("confirm")}>
+                  Confirm recorded spending
+                </button>
+                <div className="inline-form">
+                  <input type="number" min="0.01" placeholder="Missing amount" value={missingExpense.amount} onChange={e => setMissingExpense({ ...missingExpense, amount: e.target.value })} />
+                  <input placeholder="Category" value={missingExpense.category} onChange={e => setMissingExpense({ ...missingExpense, category: e.target.value })} />
+                  <button className="secondary" onClick={addMissingExpense}>Add missing expense</button>
+                </div>
+                <button
+                  className="secondary"
+                  onClick={() => spending("no-spending")}
+                >
+                  I spent nothing
+                </button>
+              </div>
+            )}
+          </div>
+        </div>
+        {dates.length > 1 && (
+          <div className="pager">
+            <button
+              className="secondary"
+              disabled={dateIndex === 0}
+              onClick={() => setDateIndex(dateIndex - 1)}
+            >
+              Previous
+            </button>
+            <span>
+              {dateIndex + 1} / {dates.length}
+            </span>
+            <button
+              className="secondary"
+              disabled={dateIndex === dates.length - 1}
+              onClick={() => setDateIndex(dateIndex + 1)}
+            >
+              Next
+            </button>
+          </div>
+        )}
+        {error && <p className="error">{error}</p>}
+        <button className="secondary" onClick={refresh}>
+          Refresh status
+        </button>
+      </div>
+    </main>
+  );
+}
+
+function Shell() {
+  const dispatch = useDispatch();
+  const user = useSelector((s) => s.auth.user);
+  const nav = useNavigate();
+  const [search, setSearch] = useState("");
+  const [results, setResults] = useState([]);
+  async function runSearch(value) { setSearch(value); if (value.trim().length < 2) return setResults([]); try { setResults((await api.get(`/search?q=${encodeURIComponent(value)}`)).data.data); } catch { setResults([]); } }
+  async function logout() {
+    await api.post("/auth/logout");
+    dispatch(clearUser());
+    nav("/login");
+  }
+  return (
+    <div className="shell">
+      <aside>
+        <Link className="brand" to="/app">
+          LIFE<span>OS</span>
+        </Link>
+        <p className="muted small">Your personal operating system</p>
+        <nav>
+          <Link to="/app">Overview</Link>
+          <Link to="/app/tasks">Tasks</Link>
+          <Link to="/app/goals">Goals</Link>
+          <Link to="/app/habits">Habits</Link>
+          <Link to="/app/timetable">Timetable</Link>
+          <Link to="/app/exercise">Exercise</Link>
+          <Link to="/app/phone-usage">Phone & check-in</Link>
+          <Link to="/app/finance">Finance</Link>
+          <Link to="/app/projects">Projects</Link>
+          <Link to="/app/work">Work</Link>
+          <Link to="/app/analytics">Analytics</Link>
+          <Link to="/app/timeline">Timeline</Link>
+          <Link to="/app/reviews">AI reviews</Link>
+          <Link to="/app/settings">Settings</Link>
+          <Link to="/app/accountability-history">Spending history</Link>
+        </nav>
+        <button className="logout" onClick={logout}>
+          Log out
+        </button>
+      </aside>
+      <section className="content">
+        <header>
+          <div>
+            <span className="eyebrow">{today()}</span>
+            <h2>Good morning, {user?.name?.split(" ")[0] || "friend"}.</h2>
+          </div>
+          <div className="search-box"><input placeholder="Search Life OS" value={search} onChange={e => runSearch(e.target.value)} />{results.length > 0 && <div className="search-results">{results.map(item => <div key={`${item.type}-${item.id}`}><small>{item.type}</small> {item.title}</div>)}</div>}</div>
+          <div className="avatar">{user?.name?.[0] || "U"}</div>
+        </header>
+        <Routes>
+          <Route index element={<CommandDashboard />} />
+          <Route path="tasks" element={<TasksPage />} />
+          <Route path="goals" element={<GoalsPage />} />
+          <Route path="habits" element={<HabitsPage />} />
+          <Route path="timetable" element={<TimetablePage />} />
+          <Route path="exercise" element={<ExercisePage />} />
+          <Route path="phone-usage" element={<PhoneUsagePage />} />
+          <Route path="finance" element={<FinancePage />} />
+          <Route path="projects" element={<ProjectsPage />} />
+          <Route path="work" element={<WorkPage />} />
+          <Route path="analytics" element={<AnalyticsPage />} />
+          <Route path="timeline" element={<TimelinePage />} />
+          <Route path="reviews" element={<ReviewsPage />} />
+          <Route path="settings" element={<SettingsPage />} />
+          <Route path="accountability-history" element={<AccountabilityHistoryPage />} />
+          <Route path="*" element={<Dashboard />} />
+        </Routes>
+      </section>
+    </div>
+  );
+}
+function Protected() {
+  const user = useSelector((s) => s.auth.user);
+  return user ? (
+    <Gate>
+      <Shell />
+    </Gate>
+  ) : (
+    <Navigate to="/login" replace />
+  );
+}
+export default function App() {
+  const dispatch = useDispatch();
+  const [checking, setChecking] = useState(true);
+  useEffect(() => {
+    api
+      .get("/auth/me")
+      .then((r) => dispatch(setUser(r.data.data)))
+      .catch(() => {})
+      .finally(() => setChecking(false));
+  }, [dispatch]);
+  if (checking) return <div className="center">Loading Life OS…</div>;
+  return (
+    <Routes>
+      <Route path="/login" element={<Auth mode="login" />} />
+      <Route path="/register" element={<Auth mode="register" />} />
+      <Route path="/app/*" element={<Protected />} />
+      <Route path="*" element={<Navigate to="/app" replace />} />
+    </Routes>
+  );
+}
