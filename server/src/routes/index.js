@@ -22,6 +22,7 @@ import {
   budgetSchema,
   financialGoalSchema,
   contributionSchema,
+  timetableCompletionSchema,
 } from "../validators/schemas.js";
 import * as auth from "../controllers/auth.controller.js";
 import * as access from "../controllers/access.controller.js";
@@ -37,6 +38,7 @@ import * as notification from "../controllers/notification.controller.js";
 import * as finance from "../controllers/finance.controller.js";
 import * as quickAdd from "../controllers/quick-add.controller.js";
 import * as recurrence from "../controllers/recurrence.controller.js";
+import * as timetable from "../controllers/timetable.controller.js";
 const router = Router();
 router.post(
   "/auth/register",
@@ -51,6 +53,8 @@ router.get("/auth/me", asyncHandler(auth.me));
 router.patch("/auth/profile", validate(settingsSchema), asyncHandler(settings.updateProfile));
 router.post("/quick-add", requireAccountability, asyncHandler(quickAdd.quickAdd));
 router.post("/tasks/sync-recurring", requireAccountability, asyncHandler(recurrence.syncTasks));
+router.post("/timetable/:id/complete", requireAccountability, validate(timetableCompletionSchema), asyncHandler(timetable.complete));
+router.get("/analytics/timetable-adherence", requireAccountability, asyncHandler(timetable.adherence));
 router.get("/access/status", asyncHandler(access.accessStatus));
 router.post(
   "/check-ins/phone",
@@ -109,8 +113,10 @@ for (const [path, key] of [
     asyncHandler(crud.remove(key)),
   );
 }
+router.get("/habits/heatmap", requireAccountability, asyncHandler(habit.heatmap));
 router.post("/habits/:id/log", requireAccountability, validate(habitLogSchema), asyncHandler(habit.log));
 router.get("/habits/:id/history", requireAccountability, asyncHandler(habit.history));
+router.get("/habits/:id/stats", requireAccountability, asyncHandler(habit.stats));
 router.get(
   "/exercise/plans",
   requireAccountability,

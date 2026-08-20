@@ -21,7 +21,7 @@ export async function calculateDailyScore(user, dateKey, { persist = true } = {}
     Task.find({ userId: user._id, dueDateKey: dateKey, deletedAt: null }).select('status category'),
     Habit.find({ userId: user._id, status: 'ACTIVE' }).select('dailyTarget minimumAcceptable'),
     ExerciseLog.find({ userId: user._id, dateKey, completed: true }).select('_id'),
-    TimetableEvent.find({ userId: user._id, dateKey, deletedAt: null }).select('status'),
+    TimetableEvent.find({ userId: user._id, dateKey, deletedAt: null }).select('status adherencePercentage'),
     PhoneUsage.findOne({ userId: user._id, dateKey }).select('phoneUsageMinutes'),
     Goal.find({ userId: user._id, status: 'ACTIVE', deletedAt: null }).select('currentProgress target'),
     HabitLog.find({ userId: user._id, dateKey }).select('completionPercentage')
@@ -32,7 +32,7 @@ export async function calculateDailyScore(user, dateKey, { persist = true } = {}
     habit: habits.length ? (habitLogs.length ? habitLogs.reduce((sum, item) => sum + item.completionPercentage, 0) / habits.length : 0) : null,
     goal: goals.length ? goals.reduce((sum, item) => sum + Math.min(100, (item.currentProgress || 0) / (item.target || 1) * 100), 0) / goals.length : null,
     exercise: workouts.length ? 100 : null,
-    timetable: ratio(timetable.filter(x => x.status === 'COMPLETED').length, timetable.length),
+    timetable: timetable.length ? timetable.some(x => x.adherencePercentage !== undefined) ? timetable.reduce((sum, item) => sum + (item.adherencePercentage ?? (item.status === 'COMPLETED' ? 100 : 0)), 0) / timetable.length : ratio(timetable.filter(x => x.status === 'COMPLETED').length, timetable.length) : null,
     phone: phone ? (user.settings?.phoneTargetMinutes ? clamp(100 - Math.max(0, phone.phoneUsageMinutes - user.settings.phoneTargetMinutes) / user.settings.phoneTargetMinutes * 100) : 100) : null,
     work: ratio(tasks.filter(x => x.category === 'WORK' && x.status === 'COMPLETED').length, tasks.filter(x => x.category === 'WORK').length)
   };

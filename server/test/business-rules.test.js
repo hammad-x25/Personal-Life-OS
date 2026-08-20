@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import { calculateWeightedScore } from '../src/services/score.service.js';
 import { expenseSchema, timetableSchema, budgetSchema, financialGoalSchema } from '../src/validators/schemas.js';
 import { matchesRecurrence } from '../src/services/recurrence.service.js';
+import { calculateAdherence } from '../src/controllers/timetable.controller.js';
 
 test('weighted score ignores non-applicable components and normalizes weights', () => {
   assert.equal(calculateWeightedScore({ task: 100, exercise: null }, { task: 20, exercise: 10 }), 100);
@@ -28,4 +29,9 @@ test('recurrence matching is deterministic by date', () => {
   assert.equal(matchesRecurrence({ type: 'WEEKLY' }, '2026-08-20', '2026-08-27'), true);
   assert.equal(matchesRecurrence({ type: 'WEEKLY' }, '2026-08-20', '2026-08-28'), false);
   assert.equal(matchesRecurrence({ type: 'CUSTOM', weekdays: [1] }, '2026-08-20', '2026-08-24'), true);
+});
+
+test('timetable adherence rewards punctual full-duration execution', () => {
+  assert.equal(calculateAdherence('09:00', '10:00', '09:00', '10:00'), 100);
+  assert.ok(calculateAdherence('09:00', '10:00', '09:15', '10:00') < 100);
 });
