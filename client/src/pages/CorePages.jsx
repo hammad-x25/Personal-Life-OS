@@ -169,15 +169,16 @@ function Card({ label, value, detail }) {
 
 export function TasksPage() {
   const resource = useResource("/tasks");
-  const [form, setForm] = useState({
-    title: "",
-    priority: "MEDIUM",
-    dueDateKey: dateKey(),
-  });
+    const [form, setForm] = useState({
+      title: "",
+      priority: "MEDIUM",
+      dueDateKey: dateKey(),
+      recurrenceType: "NONE",
+    });
   async function add(e) {
     e.preventDefault();
     if (!form.title.trim()) return;
-    await resource.create(form);
+      await resource.create({ title: form.title, priority: form.priority, dueDateKey: form.dueDateKey, recurrence: { type: form.recurrenceType } });
     setForm({ ...form, title: "" });
   }
   return (
@@ -202,12 +203,17 @@ export function TasksPage() {
             <option>MEDIUM</option>
             <option>HIGH</option>
           </select>
-          <input
-            type="date"
+            <input
+              type="date"
             value={form.dueDateKey}
             onChange={(e) => setForm({ ...form, dueDateKey: e.target.value })}
-          />
-          <button>Add task</button>
+            />
+            <select value={form.recurrenceType} onChange={(e) => setForm({ ...form, recurrenceType: e.target.value })}>
+              <option value="NONE">One time</option>
+              <option value="DAILY">Every day</option>
+              <option value="WEEKLY">Every week</option>
+            </select>
+            <button>Add task</button>
         </form>
       </section>
       <ErrorMessage error={resource.error} />

@@ -2,6 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { calculateWeightedScore } from '../src/services/score.service.js';
 import { expenseSchema, timetableSchema, budgetSchema, financialGoalSchema } from '../src/validators/schemas.js';
+import { matchesRecurrence } from '../src/services/recurrence.service.js';
 
 test('weighted score ignores non-applicable components and normalizes weights', () => {
   assert.equal(calculateWeightedScore({ task: 100, exercise: null }, { task: 20, exercise: 10 }), 100);
@@ -20,4 +21,11 @@ test('timetable validation rejects reversed time ranges', () => {
 test('budget and financial goal validation require positive targets', () => {
   assert.equal(budgetSchema.safeParse({ name: 'Food', amount: 0 }).success, false);
   assert.equal(financialGoalSchema.safeParse({ title: 'Laptop', targetAmount: 200000 }).success, true);
+});
+
+test('recurrence matching is deterministic by date', () => {
+  assert.equal(matchesRecurrence({ type: 'DAILY' }, '2026-08-20', '2026-08-23'), true);
+  assert.equal(matchesRecurrence({ type: 'WEEKLY' }, '2026-08-20', '2026-08-27'), true);
+  assert.equal(matchesRecurrence({ type: 'WEEKLY' }, '2026-08-20', '2026-08-28'), false);
+  assert.equal(matchesRecurrence({ type: 'CUSTOM', weekdays: [1] }, '2026-08-20', '2026-08-24'), true);
 });

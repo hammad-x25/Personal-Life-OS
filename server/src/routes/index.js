@@ -36,6 +36,7 @@ import * as settings from "../controllers/settings.controller.js";
 import * as notification from "../controllers/notification.controller.js";
 import * as finance from "../controllers/finance.controller.js";
 import * as quickAdd from "../controllers/quick-add.controller.js";
+import * as recurrence from "../controllers/recurrence.controller.js";
 const router = Router();
 router.post(
   "/auth/register",
@@ -49,6 +50,7 @@ router.use(authenticate);
 router.get("/auth/me", asyncHandler(auth.me));
 router.patch("/auth/profile", validate(settingsSchema), asyncHandler(settings.updateProfile));
 router.post("/quick-add", requireAccountability, asyncHandler(quickAdd.quickAdd));
+router.post("/tasks/sync-recurring", requireAccountability, asyncHandler(recurrence.syncTasks));
 router.get("/access/status", asyncHandler(access.accessStatus));
 router.post(
   "/check-ins/phone",
