@@ -35,6 +35,7 @@ import * as habit from "../controllers/habit.controller.js";
 import * as settings from "../controllers/settings.controller.js";
 import * as notification from "../controllers/notification.controller.js";
 import * as finance from "../controllers/finance.controller.js";
+import * as quickAdd from "../controllers/quick-add.controller.js";
 const router = Router();
 router.post(
   "/auth/register",
@@ -47,6 +48,7 @@ router.post("/auth/logout", asyncHandler(auth.logout));
 router.use(authenticate);
 router.get("/auth/me", asyncHandler(auth.me));
 router.patch("/auth/profile", validate(settingsSchema), asyncHandler(settings.updateProfile));
+router.post("/quick-add", requireAccountability, asyncHandler(quickAdd.quickAdd));
 router.get("/access/status", asyncHandler(access.accessStatus));
 router.post(
   "/check-ins/phone",
