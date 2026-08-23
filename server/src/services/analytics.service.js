@@ -8,7 +8,7 @@ import TimetableEvent from '../models/TimetableEvent.js';
 import Project from '../models/Project.js';
 import DailyPerformance from '../models/DailyPerformance.js';
 import SpendingAccountability from '../models/SpendingAccountability.js';
-import { dateKeyInTimezone, dateKeysBetween, shiftDateKey } from '../utils/dates.js';
+import { dateKeyInTimezone, dateKeysBetween, shiftDateKey, weekPeriod, monthPeriod } from '../utils/dates.js';
 import { calculateDailyScore } from './score.service.js';
 
 export async function dashboardToday(user) {
@@ -48,4 +48,38 @@ export async function financeSummary(user, startDateKey, endDateKey) {
     SpendingAccountability.countDocuments({ userId: user._id, dateKey: { $gte: startDateKey, $lte: endDateKey }, status: 'ACCOUNTED' })
   ]);
   return { totals, categories, trend, accountabilityDays: accountability };
+}
+
+export async function dashboardPeriod(user, type) {
+  const dateKey = dateKeyInTimezone(new Date(), user.timezone);
+  const period = type === 'WEEKLY' ? weekPeriod(dateKey) : monthPeriod(dateKey);
+  const [performance, finance, tasks, goals, projects] = await Promise.all([
+    DailyPerformance.find({ userId: user._id, dateKey: { $gte: period.startDateKey, $lte: period.endDateKey } }).sort({ dateKey: 1 }),
+    financeSummary(user, period.startDateKey, period.endDateKey),
+    Task.aggregate([{ $match: { userId: user._id, dueDateKey: { $gte: period.startDateKey, $lte: period.endDateKey }, deletedAt: null } }, { $group: { _id: '$status', count: { $sum: 1 } } }]),
+    Goal.find({ userId: user._id, status: 'ACTIVE', deletedAt: null }).select('title currentProgress target unit'),
+    Project.find({ userId: user._id, status: { $in: ['ACTIVE', 'COMPLETED'] }, deletedAt: null }).select('name status deadlineKey')
+  ]);
+  const score = performance.length ? performance.reduce((sum, item) => sum + item.score, 0) / performance.length : null;
+  return { type, period, score, performance, finance, tasks, goals, projects };
+}
+
+export async function correlations(user, startDateKey, endDateKey) {
+  const [scores, phones, workouts] = await Promise.all([
+    DailyPerformance.find({ userId: user._id, dateKey: { $gte: startDateKey, $lte: endDateKey } }).select('dateKey score'),
+    PhoneUsage.find({ userId: user._id, dateKey: { $gte: startDateKey, $lte: endDateKey } }).select('dateKey phoneUsageMinutes'),
+    ExerciseLog.find({ userId: user._id, dateKey: { $gte: startDateKey, $lte: endDateKey }, completed: true }).select('dateKey')
+  ]);
+  const scoreMap = new Map(scores.map(item => [item.dateKey, item.score]));
+  const phonePairs = phones.filter(item => scoreMap.has(item.dateKey)).map(item => ({ phone: item.phoneUsageMinutes, score: scoreMap.get(item.dateKey) }));
+  const workoutDates = new Set(workouts.map(item => item.dateKey));
+  const withWorkout = scores.filter(item => workoutDates.has(item.dateKey)).map(item => item.score);
+  const withoutWorkout = scores.filter(item => !workoutDates.has(item.dateKey)).map(item => item.score);
+  const average = values => values.length ? values.reduce((a, b) => a + b, 0) / values.length : null;
+  const lowPhone = phonePairs.filter(item => item.phone < 180).map(item => item.score);
+  const highPhone = phonePairs.filter(item => item.phone >= 300).map(item => item.score);
+  return { period: { startDateKey, endDateKey }, observations: [
+    { type: 'PHONE_USAGE', message: 'Lower-phone-usage days averaged higher productivity.', lowUsageAverage: average(lowPhone), highUsageAverage: average(highPhone), sampleSize: phonePairs.length },
+    { type: 'EXERCISE', message: 'Days with exercise are compared with days without exercise.', exerciseAverage: average(withWorkout), noExerciseAverage: average(withoutWorkout), sampleSize: scores.length }
+  ] };
 }

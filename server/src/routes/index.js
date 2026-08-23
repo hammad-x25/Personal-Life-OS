@@ -137,12 +137,15 @@ router.post(
   asyncHandler(exercise.createLog),
 );
 router.get("/dashboard/today", requireAccountability, asyncHandler(analytics.today));
+router.get("/dashboard/weekly", requireAccountability, asyncHandler(analytics.weeklyDashboard));
+router.get("/dashboard/monthly", requireAccountability, asyncHandler(analytics.monthlyDashboard));
 router.get("/analytics/daily", requireAccountability, asyncHandler(analytics.daily));
 router.get("/analytics/weekly", requireAccountability, asyncHandler(analytics.weekly));
 router.get("/analytics/monthly", requireAccountability, asyncHandler(analytics.monthly));
 router.get("/analytics/growth", requireAccountability, asyncHandler(analytics.growthData));
 router.get("/analytics/finance", requireAccountability, asyncHandler(analytics.finance));
 router.get("/analytics/periods", requireAccountability, asyncHandler(analytics.currentPeriods));
+router.get("/analytics/correlations", requireAccountability, asyncHandler(analytics.correlationData));
 router.get("/timeline", requireAccountability, asyncHandler(analytics.timeline));
 router.get("/search", requireAccountability, asyncHandler(search.search));
 router.get("/notifications", requireAccountability, asyncHandler(notification.list));
