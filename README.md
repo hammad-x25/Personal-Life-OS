@@ -18,6 +18,9 @@ A local-first MERN personal operating system for planning, recording, measuring,
 - Finance summaries, projects, project milestones, timeline events, and historical analytics APIs
 - Server-side AI review service with local fallback and validated structured output
 - Search across tasks, goals, habits, projects, expenses, and timeline events
+- Rotating, revocable refresh-token sessions with MongoDB TTL cleanup
+- Configurable profile, timezone, currency, score weights, accountability, and theme settings
+- Scheduled reminders and 14-day analytics seed data
 
 ## Requirements
 
@@ -35,6 +38,13 @@ npm run dev
 
 The client runs at `http://localhost:5173` and the API at `http://localhost:5000`.
 
+To enable hourly local automation for daily snapshots, period summaries, and reminders:
+
+```powershell
+$env:ENABLE_JOBS="true"
+npm.cmd run dev:server
+```
+
 Demo credentials after seeding:
 
 ```text
@@ -47,6 +57,14 @@ MongoDB Compass can connect to the URI in `.env`; the default database is `life_
 ## Accountability behavior
 
 The first registration day is not blocked. Starting on subsequent days, the backend calculates all required dates in the user's timezone. Normal productivity CRUD routes remain locked until phone usage and spending are explicitly accounted for. Existing expenses are aggregated during confirmation; a missing expense is never interpreted as zero. The explicit zero-spending action creates a separate acknowledgement record.
+
+## Tests
+
+```powershell
+npm.cmd --prefix server test
+```
+
+The test suite covers timezone boundaries, multi-day accountability, score weighting, expense validation, and timetable validation.
 
 ## API starting points
 
@@ -66,7 +84,7 @@ GET/POST/PATCH/DELETE /api/habits
 
 ## Architecture direction
 
-Business rules belong in backend services and middleware. Date-only concepts use `dateKey` values such as `2026-08-17`; timestamps remain UTC. Future phases add deterministic analytics snapshots, timeline events, background jobs, and the isolated server-side AI service without moving secrets to the browser.
+Business rules belong in backend services and middleware. Date-only concepts use `dateKey` values such as `2026-08-17`; timestamps remain UTC. Deterministic analytics snapshots, timeline events, background jobs, and the isolated server-side AI service keep secrets and calculations out of the browser.
 
 ## Troubleshooting
 

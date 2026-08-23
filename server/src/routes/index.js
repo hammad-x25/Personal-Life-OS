@@ -12,11 +12,13 @@ import {
   goalSchema,
   habitSchema,
   timetableSchema,
+  timetableUpdateSchema,
   exercisePlanSchema,
   exerciseLogSchema,
   projectSchema,
   milestoneSchema,
   habitLogSchema,
+  settingsSchema,
 } from "../validators/schemas.js";
 import * as auth from "../controllers/auth.controller.js";
 import * as access from "../controllers/access.controller.js";
@@ -27,6 +29,8 @@ import * as project from "../controllers/project.controller.js";
 import * as review from "../controllers/review.controller.js";
 import * as search from "../controllers/search.controller.js";
 import * as habit from "../controllers/habit.controller.js";
+import * as settings from "../controllers/settings.controller.js";
+import * as notification from "../controllers/notification.controller.js";
 const router = Router();
 router.post(
   "/auth/register",
@@ -38,6 +42,7 @@ router.post("/auth/refresh", asyncHandler(auth.refreshToken));
 router.post("/auth/logout", asyncHandler(auth.logout));
 router.use(authenticate);
 router.get("/auth/me", asyncHandler(auth.me));
+router.patch("/auth/profile", validate(settingsSchema), asyncHandler(settings.updateProfile));
 router.get("/access/status", asyncHandler(access.accessStatus));
 router.post(
   "/check-ins/phone",
@@ -68,7 +73,7 @@ const resourceSchemas = {
   tasks: taskSchema,
   goals: goalSchema,
   habits: habitSchema,
-  timetable: timetableSchema,
+  timetable: { create: timetableSchema, update: timetableUpdateSchema },
 };
 for (const [path, key] of [
   ["expenses", "expenses"],
@@ -81,13 +86,13 @@ for (const [path, key] of [
   router.post(
     `/${path}`,
     requireAccountability,
-    validate(resourceSchemas[key]),
+    validate(resourceSchemas[key].create || resourceSchemas[key]),
     asyncHandler(crud.create(key)),
   );
   router.patch(
     `/${path}/:id`,
     requireAccountability,
-    validate(resourceSchemas[key].partial()),
+    validate(resourceSchemas[key].update || resourceSchemas[key].partial()),
     asyncHandler(crud.update(key)),
   );
   router.delete(
@@ -140,6 +145,10 @@ router.get("/analytics/finance", requireAccountability, asyncHandler(analytics.f
 router.get("/analytics/periods", requireAccountability, asyncHandler(analytics.currentPeriods));
 router.get("/timeline", requireAccountability, asyncHandler(analytics.timeline));
 router.get("/search", requireAccountability, asyncHandler(search.search));
+router.get("/notifications", requireAccountability, asyncHandler(notification.list));
+router.get("/notifications/unread-count", requireAccountability, asyncHandler(notification.unreadCount));
+router.patch("/notifications/:id/read", requireAccountability, asyncHandler(notification.markRead));
+router.patch("/notifications/:id/dismiss", requireAccountability, asyncHandler(notification.dismiss));
 router.get("/projects", requireAccountability, asyncHandler(project.list));
 router.post("/projects", requireAccountability, validate(projectSchema), asyncHandler(project.create));
 router.patch("/projects/:id", requireAccountability, validate(projectSchema.partial()), asyncHandler(project.update));
