@@ -228,12 +228,26 @@ function Accountability({ status }) {
   );
 }
 
+function QuickAdd({ onClose, onSaved }) {
+  const [type, setType] = useState('task');
+  const [form, setForm] = useState({ title: '', amount: '', category: 'Food', description: '', phoneUsageMinutes: '', workoutType: '', dateKey: today(), target: 100, unit: '%', dailyTarget: 30, targetUnit: 'minutes' });
+  const [error, setError] = useState('');
+  function update(field, value) { setForm(current => ({ ...current, [field]: value })); }
+  async function submit(e) {
+    e.preventDefault(); setError('');
+    const payload = type === 'expense' ? { amount: Number(form.amount), category: form.category, description: form.description, dateKey: form.dateKey } : type === 'goal' ? { title: form.title, target: Number(form.target), currentProgress: 0, unit: form.unit } : type === 'habit' ? { title: form.title, dailyTarget: Number(form.dailyTarget), targetUnit: form.targetUnit, planStartDateKey: form.dateKey } : type === 'workout' ? { dateKey: form.dateKey, workoutType: form.workoutType, completed: true } : type === 'phoneUsage' ? { dateKey: form.dateKey, phoneUsageMinutes: Number(form.phoneUsageMinutes) } : { title: form.title, dueDateKey: form.dateKey };
+    try { await api.post('/quick-add', { type, payload }); onSaved?.(); onClose(); } catch (e) { setError(e.response?.data?.message || 'Could not add item'); }
+  }
+  return <div className="modal-backdrop" onMouseDown={onClose}><div className="quick-add modal" onMouseDown={e => e.stopPropagation()}><div className="row-between"><div><span className="eyebrow">COMMAND CENTER</span><h2>Quick add</h2></div><button className="icon-button" onClick={onClose}>Close</button></div><select value={type} onChange={e => setType(e.target.value)}><option value="task">Task</option><option value="expense">Expense</option><option value="goal">Goal</option><option value="habit">Habit</option><option value="workout">Workout</option><option value="phoneUsage">Phone usage</option></select><form onSubmit={submit}>{type === 'task' && <><input required placeholder="Task title" value={form.title} onChange={e => update('title', e.target.value)} /><input type="date" value={form.dateKey} onChange={e => update('dateKey', e.target.value)} /></>}{type === 'expense' && <><input required type="number" min="0.01" placeholder="Amount" value={form.amount} onChange={e => update('amount', e.target.value)} /><input required placeholder="Category" value={form.category} onChange={e => update('category', e.target.value)} /><input placeholder="Description" value={form.description} onChange={e => update('description', e.target.value)} /><input type="date" value={form.dateKey} onChange={e => update('dateKey', e.target.value)} /></>}{type === 'goal' && <><input required placeholder="Goal title" value={form.title} onChange={e => update('title', e.target.value)} /><input required type="number" min="0.01" placeholder="Target" value={form.target} onChange={e => update('target', e.target.value)} /><input placeholder="Unit" value={form.unit} onChange={e => update('unit', e.target.value)} /></>}{type === 'habit' && <><input required placeholder="Habit title" value={form.title} onChange={e => update('title', e.target.value)} /><input type="number" min="0" placeholder="Daily target" value={form.dailyTarget} onChange={e => update('dailyTarget', e.target.value)} /><input placeholder="Unit" value={form.targetUnit} onChange={e => update('targetUnit', e.target.value)} /></>}{type === 'workout' && <><input required placeholder="Workout type" value={form.workoutType} onChange={e => update('workoutType', e.target.value)} /><input type="date" value={form.dateKey} onChange={e => update('dateKey', e.target.value)} /></>}{type === 'phoneUsage' && <><input required type="number" min="0" placeholder="Minutes" value={form.phoneUsageMinutes} onChange={e => update('phoneUsageMinutes', e.target.value)} /><input type="date" value={form.dateKey} onChange={e => update('dateKey', e.target.value)} /></>}<button>Add to Life OS</button></form>{error && <p className="error">{error}</p>}</div></div>;
+}
+
 function Shell() {
   const dispatch = useDispatch();
   const user = useSelector((s) => s.auth.user);
   const nav = useNavigate();
   const [search, setSearch] = useState("");
   const [results, setResults] = useState([]);
+  const [quickAddOpen, setQuickAddOpen] = useState(false);
   useEffect(() => { const theme = user?.settings?.theme || 'dark'; document.body.dataset.theme = theme; return () => { delete document.body.dataset.theme; }; }, [user]);
   async function runSearch(value) { setSearch(value); if (value.trim().length < 2) return setResults([]); try { setResults((await api.get(`/search?q=${encodeURIComponent(value)}`)).data.data); } catch { setResults([]); } }
   async function logout() {
@@ -277,6 +291,7 @@ function Shell() {
             <h2>Good morning, {user?.name?.split(" ")[0] || "friend"}.</h2>
           </div>
           <div className="search-box"><input placeholder="Search Life OS" value={search} onChange={e => runSearch(e.target.value)} />{results.length > 0 && <div className="search-results">{results.map(item => <div key={`${item.type}-${item.id}`}><small>{item.type}</small> {item.title}</div>)}</div>}</div>
+          <button className="quick-add-trigger" onClick={() => setQuickAddOpen(true)}>+ Quick add</button>
           <div className="avatar">{user?.name?.[0] || "U"}</div>
         </header>
         <Routes>
@@ -299,6 +314,7 @@ function Shell() {
           <Route path="*" element={<Dashboard />} />
         </Routes>
       </section>
+      {quickAddOpen && <QuickAdd onClose={() => setQuickAddOpen(false)} onSaved={() => window.location.reload()} />}
     </div>
   );
 }

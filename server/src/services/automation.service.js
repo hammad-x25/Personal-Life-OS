@@ -5,12 +5,14 @@ import { finalizePeriod } from './performance.service.js';
 import { createDailyReminders } from './notification.service.js';
 import { createTimelineEvent } from './timeline.service.js';
 import { dateKeyInTimezone, shiftDateKey, weekPeriod, monthPeriod } from '../utils/dates.js';
+import { syncRecurringTasks } from './recurrence.service.js';
 
 export async function runAutomation(now = new Date()) {
   const users = await User.find({}).select('_id timezone settings');
   for (const user of users) {
     const today = dateKeyInTimezone(now, user.timezone);
     const yesterday = shiftDateKey(today, -1);
+    await syncRecurringTasks(user, today, shiftDateKey(today, 30));
     const snapshot = await calculateDailyScore(user, yesterday, { persist: true });
     if (snapshot) await createTimelineEvent({ userId: user._id, type: 'DAILY_PERFORMANCE_GENERATED', title: `Daily performance recorded: ${snapshot.score}%`, timezone: user.timezone, metadata: { dateKey: yesterday } });
     await finalizePeriod(user, 'WEEKLY', weekPeriod(yesterday));

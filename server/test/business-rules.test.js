@@ -1,7 +1,9 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { calculateWeightedScore } from '../src/services/score.service.js';
-import { expenseSchema, timetableSchema } from '../src/validators/schemas.js';
+import { expenseSchema, timetableSchema, budgetSchema, financialGoalSchema } from '../src/validators/schemas.js';
+import { matchesRecurrence } from '../src/services/recurrence.service.js';
+import { calculateAdherence } from '../src/controllers/timetable.controller.js';
 
 test('weighted score ignores non-applicable components and normalizes weights', () => {
   assert.equal(calculateWeightedScore({ task: 100, exercise: null }, { task: 20, exercise: 10 }), 100);
@@ -15,4 +17,21 @@ test('expense validation rejects zero and negative amounts', () => {
 
 test('timetable validation rejects reversed time ranges', () => {
   assert.equal(timetableSchema.safeParse({ title: 'Study', dateKey: '2026-08-18', startTime: '20:00', endTime: '19:00' }).success, false);
+});
+
+test('budget and financial goal validation require positive targets', () => {
+  assert.equal(budgetSchema.safeParse({ name: 'Food', amount: 0 }).success, false);
+  assert.equal(financialGoalSchema.safeParse({ title: 'Laptop', targetAmount: 200000 }).success, true);
+});
+
+test('recurrence matching is deterministic by date', () => {
+  assert.equal(matchesRecurrence({ type: 'DAILY' }, '2026-08-20', '2026-08-23'), true);
+  assert.equal(matchesRecurrence({ type: 'WEEKLY' }, '2026-08-20', '2026-08-27'), true);
+  assert.equal(matchesRecurrence({ type: 'WEEKLY' }, '2026-08-20', '2026-08-28'), false);
+  assert.equal(matchesRecurrence({ type: 'CUSTOM', weekdays: [1] }, '2026-08-20', '2026-08-24'), true);
+});
+
+test('timetable adherence rewards punctual full-duration execution', () => {
+  assert.equal(calculateAdherence('09:00', '10:00', '09:00', '10:00'), 100);
+  assert.ok(calculateAdherence('09:00', '10:00', '09:15', '10:00') < 100);
 });

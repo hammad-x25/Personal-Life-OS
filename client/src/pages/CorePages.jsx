@@ -169,17 +169,18 @@ function Card({ label, value, detail }) {
 
 export function TasksPage() {
   const resource = useResource("/tasks");
-  const [form, setForm] = useState({
-    title: "",
-    priority: "MEDIUM",
-    dueDateKey: dateKey(),
-  });
-  async function add(e) {
+    const [form, setForm] = useState({
+      title: "",
+      priority: "MEDIUM",
+      dueDateKey: dateKey(),
+      recurrenceType: "NONE",
+    });
+    async function add(e) {
     e.preventDefault();
     if (!form.title.trim()) return;
-    await resource.create(form);
-    setForm({ ...form, title: "" });
-  }
+      await resource.create({ title: form.title, priority: form.priority, dueDateKey: form.dueDateKey, recurrence: { type: form.recurrenceType } });
+      setForm({ ...form, title: "" });
+    }
   return (
     <div>
       <PageHeader
@@ -202,12 +203,17 @@ export function TasksPage() {
             <option>MEDIUM</option>
             <option>HIGH</option>
           </select>
-          <input
-            type="date"
+            <input
+              type="date"
             value={form.dueDateKey}
             onChange={(e) => setForm({ ...form, dueDateKey: e.target.value })}
-          />
-          <button>Add task</button>
+            />
+            <select value={form.recurrenceType} onChange={(e) => setForm({ ...form, recurrenceType: e.target.value })}>
+              <option value="NONE">One time</option>
+              <option value="DAILY">Every day</option>
+              <option value="WEEKLY">Every week</option>
+            </select>
+            <button>Add task</button>
         </form>
       </section>
       <ErrorMessage error={resource.error} />
@@ -350,7 +356,8 @@ export function GoalsPage() {
 }
 
 export function HabitsPage() {
-  const resource = useResource("/habits");
+    const resource = useResource("/habits");
+    const [stats, setStats] = useState({});
   const [form, setForm] = useState({
     title: "",
     dailyTarget: 30,
@@ -370,7 +377,7 @@ export function HabitsPage() {
     });
     setForm({ ...form, title: "" });
   }
-  async function log(habit) {
+    async function log(habit) {
     const actual = window.prompt(
       `Actual ${habit.targetUnit || "value"} for ${habit.title}?`,
       String(habit.dailyTarget || 0),
@@ -380,8 +387,9 @@ export function HabitsPage() {
       dateKey: dateKey(),
       actualValue: Number(actual),
     });
-    await resource.reload();
-  }
+      await resource.reload();
+    }
+    useEffect(() => { Promise.all(resource.items.map(async habit => [habit._id, (await api.get(`/habits/${habit._id}/stats`)).data.data])).then(entries => setStats(Object.fromEntries(entries))).catch(() => {}); }, [resource.items]);
   return (
     <div>
       <PageHeader
@@ -427,6 +435,7 @@ export function HabitsPage() {
                 {habit.dailyTarget} {habit.targetUnit} daily · minimum{" "}
                 {habit.minimumAcceptable} · {habit.preferredTime}
               </small>
+              {stats[habit._id] && <div className="habit-stats"><span>{stats[habit._id].currentStreak} day streak</span><span>{Math.round(stats[habit._id].completionRate)}% complete</span><div className="habit-heatmap">{stats[habit._id].heatmap.slice(-35).map(day => <i key={day.dateKey} title={`${day.dateKey}: ${day.completionPercentage}%`} className={day.completionPercentage >= 100 ? 'complete' : day.completionPercentage > 0 ? 'partial' : ''} />)}</div></div>}
             </div>
             <button className="secondary" onClick={() => log(habit)}>
               Log today
@@ -462,6 +471,7 @@ export function TimetablePage() {
     await resource.create(form);
     setForm({ ...form, title: "" });
   }
+  async function complete(event) { const actualStartTime = window.prompt('Actual start time (HH:mm)', event.startTime); if (!actualStartTime) return; const actualEndTime = window.prompt('Actual end time (HH:mm)', event.endTime); if (!actualEndTime) return; await api.post(`/timetable/${event._id}/complete`, { actualStartTime, actualEndTime, status: 'COMPLETED' }); await resource.reload(); }
   return (
     <div>
       <PageHeader
@@ -505,7 +515,9 @@ export function TimetablePage() {
                 {event.category}
               </small>
             </div>
-            <button
+              {event.adherencePercentage != null && <small className="success">Adherence {Math.round(event.adherencePercentage)}%</small>}
+              {event.status !== 'COMPLETED' && <button className="secondary" onClick={() => complete(event)}>Record actual</button>}
+              <button
               className="icon-button"
               onClick={() => resource.remove(event._id)}
             >

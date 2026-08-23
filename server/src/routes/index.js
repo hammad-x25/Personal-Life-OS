@@ -19,6 +19,10 @@ import {
   milestoneSchema,
   habitLogSchema,
   settingsSchema,
+  budgetSchema,
+  financialGoalSchema,
+  contributionSchema,
+  timetableCompletionSchema,
 } from "../validators/schemas.js";
 import * as auth from "../controllers/auth.controller.js";
 import * as access from "../controllers/access.controller.js";
@@ -31,6 +35,10 @@ import * as search from "../controllers/search.controller.js";
 import * as habit from "../controllers/habit.controller.js";
 import * as settings from "../controllers/settings.controller.js";
 import * as notification from "../controllers/notification.controller.js";
+import * as finance from "../controllers/finance.controller.js";
+import * as quickAdd from "../controllers/quick-add.controller.js";
+import * as recurrence from "../controllers/recurrence.controller.js";
+import * as timetable from "../controllers/timetable.controller.js";
 const router = Router();
 router.post(
   "/auth/register",
@@ -43,6 +51,10 @@ router.post("/auth/logout", asyncHandler(auth.logout));
 router.use(authenticate);
 router.get("/auth/me", asyncHandler(auth.me));
 router.patch("/auth/profile", validate(settingsSchema), asyncHandler(settings.updateProfile));
+router.post("/quick-add", requireAccountability, asyncHandler(quickAdd.quickAdd));
+router.post("/tasks/sync-recurring", requireAccountability, asyncHandler(recurrence.syncTasks));
+router.post("/timetable/:id/complete", requireAccountability, validate(timetableCompletionSchema), asyncHandler(timetable.complete));
+router.get("/analytics/timetable-adherence", requireAccountability, asyncHandler(timetable.adherence));
 router.get("/access/status", asyncHandler(access.accessStatus));
 router.post(
   "/check-ins/phone",
@@ -101,8 +113,10 @@ for (const [path, key] of [
     asyncHandler(crud.remove(key)),
   );
 }
+router.get("/habits/heatmap", requireAccountability, asyncHandler(habit.heatmap));
 router.post("/habits/:id/log", requireAccountability, validate(habitLogSchema), asyncHandler(habit.log));
 router.get("/habits/:id/history", requireAccountability, asyncHandler(habit.history));
+router.get("/habits/:id/stats", requireAccountability, asyncHandler(habit.stats));
 router.get(
   "/exercise/plans",
   requireAccountability,
@@ -146,6 +160,15 @@ router.get("/analytics/growth", requireAccountability, asyncHandler(analytics.gr
 router.get("/analytics/finance", requireAccountability, asyncHandler(analytics.finance));
 router.get("/analytics/periods", requireAccountability, asyncHandler(analytics.currentPeriods));
 router.get("/analytics/correlations", requireAccountability, asyncHandler(analytics.correlationData));
+router.get("/budgets", requireAccountability, asyncHandler(finance.listBudgets));
+router.post("/budgets", requireAccountability, validate(budgetSchema), asyncHandler(finance.createBudget));
+router.patch("/budgets/:id", requireAccountability, validate(budgetSchema.partial()), asyncHandler(finance.updateBudget));
+router.delete("/budgets/:id", requireAccountability, asyncHandler(finance.deleteBudget));
+router.get("/finance-goals", requireAccountability, asyncHandler(finance.listFinancialGoals));
+router.post("/finance-goals", requireAccountability, validate(financialGoalSchema), asyncHandler(finance.createFinancialGoal));
+router.patch("/finance-goals/:id", requireAccountability, validate(financialGoalSchema.partial()), asyncHandler(finance.updateFinancialGoal));
+router.post("/finance-goals/:id/contributions", requireAccountability, validate(contributionSchema), asyncHandler(finance.contribute));
+router.delete("/finance-goals/:id", requireAccountability, asyncHandler(finance.deleteFinancialGoal));
 router.get("/timeline", requireAccountability, asyncHandler(analytics.timeline));
 router.get("/search", requireAccountability, asyncHandler(search.search));
 router.get("/notifications", requireAccountability, asyncHandler(notification.list));

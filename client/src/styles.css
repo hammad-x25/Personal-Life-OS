@@ -6,6 +6,16 @@
 .search-results { position: absolute; z-index: 4; top: calc(100% + 8px); left: 0; right: 0; background: #111a25; border: 1px solid #29384a; border-radius: 12px; padding: 8px; box-shadow: 0 15px 30px #0006; }
 .search-results div { padding: 9px; color: #d8e2ed; }
 .search-results small { color: #a4f17d; margin-right: 8px; }
+.habit-stats { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; color: #8493a5; font-size: .75rem; }
+.habit-heatmap { display: flex; gap: 3px; }
+.habit-heatmap i { width: 9px; height: 9px; border-radius: 2px; background: #29384a; }
+.habit-heatmap i.partial { background: #c99745; }
+.habit-heatmap i.complete { background: #a4f17d; }
+.quick-add-trigger { white-space: nowrap; }
+.modal-backdrop { position: fixed; inset: 0; z-index: 20; display: grid; place-items: center; padding: 20px; background: #05080dcc; }
+.modal { width: min(100%, 560px); max-height: calc(100vh - 40px); overflow: auto; background: #111a25; border: 1px solid #29384a; border-radius: 20px; padding: 24px; box-shadow: 0 30px 80px #0008; }
+.modal form { margin-bottom: 0; }
+@media (max-width: 800px) { .quick-add-trigger { width: 100%; } }
 body[data-theme="light"] { background: #f4f7fb; color: #17202b; }
 body[data-theme="light"] .shell, body[data-theme="light"] .center { background: #f4f7fb; }
 body[data-theme="light"] .card, body[data-theme="light"] .panel, body[data-theme="light"] .list-row, body[data-theme="light"] .search-results { background: #ffffff; border-color: #d9e1eb; }

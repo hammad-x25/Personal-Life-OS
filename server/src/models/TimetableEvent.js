@@ -11,6 +11,9 @@ const schema = new mongoose.Schema({
   color: String,
   notes: String,
   status: { type: String, enum: ['PLANNED', 'COMPLETED', 'PARTIAL', 'MISSED'], default: 'PLANNED' },
+  actualStartTime: String,
+  actualEndTime: String,
+  adherencePercentage: { type: Number, min: 0, max: 100 },
   recurrence: { type: { type: String, default: 'NONE' }, weekdays: [Number], endDateKey: String },
   deletedAt: Date
 }, { timestamps: true });
