@@ -8,8 +8,8 @@ import {
   hashToken,
   verifyRefresh,
 } from "./token.service.js";
-import RefreshToken from '../models/RefreshToken.js';
-import crypto from 'crypto';
+import RefreshToken from "../models/RefreshToken.js";
+import crypto from "crypto";
 
 function expiryDate(value) {
   const match = String(value).match(/^(\d+)([smhd])$/);
@@ -47,7 +47,12 @@ async function issue(user, familyId = crypto.randomUUID()) {
     refreshToken = signRefresh(user._id);
   user.lastActiveAt = new Date();
   await user.save();
-  await RefreshToken.create({ userId: user._id, tokenHash: hashToken(refreshToken), familyId, expiresAt: expiryDate(process.env.REFRESH_TOKEN_EXPIRY || '30d') });
+  await RefreshToken.create({
+    userId: user._id,
+    tokenHash: hashToken(refreshToken),
+    familyId,
+    expiresAt: expiryDate(process.env.REFRESH_TOKEN_EXPIRY || "30d"),
+  });
   const safeUser = user.toObject();
   delete safeUser.passwordHash;
   delete safeUser.refreshTokenHash;
@@ -57,10 +62,19 @@ export async function refresh(token) {
   const payload = verifyRefresh(token);
   const stored = await RefreshToken.findOne({ tokenHash: hashToken(token) });
   const user = await User.findById(payload.userId);
-  if (!user || !stored || stored.userId.toString() !== user._id.toString() || stored.revokedAt || stored.expiresAt <= new Date()) throw new AppError("Invalid refresh token", 401, "INVALID_REFRESH_TOKEN");
+  if (
+    !user ||
+    !stored ||
+    stored.userId.toString() !== user._id.toString() ||
+    stored.revokedAt ||
+    stored.expiresAt <= new Date()
+  )
+    throw new AppError("Invalid refresh token", 401, "INVALID_REFRESH_TOKEN");
   stored.revokedAt = new Date();
   const result = await issue(user, stored.familyId);
-  const replacement = await RefreshToken.findOne({ tokenHash: hashToken(result.refreshToken) });
+  const replacement = await RefreshToken.findOne({
+    tokenHash: hashToken(result.refreshToken),
+  });
   stored.replacedByTokenId = replacement?._id;
   await stored.save();
   return result;
@@ -68,5 +82,8 @@ export async function refresh(token) {
 
 export async function revokeRefreshToken(token) {
   if (!token) return;
-  await RefreshToken.updateOne({ tokenHash: hashToken(token), revokedAt: null }, { $set: { revokedAt: new Date() } });
+  await RefreshToken.updateOne(
+    { tokenHash: hashToken(token), revokedAt: null },
+    { $set: { revokedAt: new Date() } },
+  );
 }

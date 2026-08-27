@@ -4,6 +4,9 @@ import { calculateWeightedScore } from '../src/services/score.service.js';
 import { expenseSchema, timetableSchema, budgetSchema, financialGoalSchema } from '../src/validators/schemas.js';
 import { matchesRecurrence } from '../src/services/recurrence.service.js';
 import { calculateAdherence } from '../src/controllers/timetable.controller.js';
+import { generateReview, parseAndNormalize } from '../src/services/ai.service.js';
+import { isHabitScheduledDate, habitLogStatus } from '../src/controllers/habit.controller.js';
+import { isExercisePlanScheduled } from '../src/controllers/exercise.controller.js';
 
 test('weighted score ignores non-applicable components and normalizes weights', () => {
   assert.equal(calculateWeightedScore({ task: 100, exercise: null }, { task: 20, exercise: 10 }), 100);
@@ -34,4 +37,33 @@ test('recurrence matching is deterministic by date', () => {
 test('timetable adherence rewards punctual full-duration execution', () => {
   assert.equal(calculateAdherence('09:00', '10:00', '09:00', '10:00'), 100);
   assert.ok(calculateAdherence('09:00', '10:00', '09:15', '10:00') < 100);
+});
+
+test('AI review has a safe local fallback when no provider is configured', async () => {
+  const result = await generateReview({ score: 80 }, 'DAILY');
+  assert.equal(typeof result.summary, 'string');
+  assert.ok(Array.isArray(result.recommendations));
+});
+
+test('AI response normalization safely falls back on invalid JSON and bounds growth', () => {
+  const invalid = parseAndNormalize('{not-json', { score: 70 });
+  assert.equal(invalid.validationStatus, 'INVALID_PROVIDER_RESPONSE');
+  const normalized = parseAndNormalize(JSON.stringify({ summary: 'ok', recommendations: ['next'], estimatedGrowth: 900 }), { score: 70 });
+  assert.equal(normalized.validationStatus, 'VALIDATED');
+  assert.equal(normalized.estimatedGrowth, 100);
+});
+
+test('habit schedules honor weekdays and minimum acceptable performance', () => {
+  const habit = { frequencyType: 'CUSTOM', weekdays: [1, 3, 5], planStartDateKey: '2026-08-17' };
+  assert.equal(isHabitScheduledDate(habit, '2026-08-17'), true);
+  assert.equal(isHabitScheduledDate(habit, '2026-08-18'), false);
+  assert.equal(habitLogStatus(60, 60, 20), 'COMPLETED');
+  assert.equal(habitLogStatus(30, 60, 20), 'PARTIAL');
+  assert.equal(habitLogStatus(10, 60, 20), 'SKIPPED');
+});
+
+test('exercise plans match scheduled weekdays', () => {
+  const plan = { schedule: [{ weekday: 1, exercises: [{ name: 'Run' }] }] };
+  assert.equal(isExercisePlanScheduled(plan, '2026-08-24'), true);
+  assert.equal(isExercisePlanScheduled(plan, '2026-08-25'), false);
 });

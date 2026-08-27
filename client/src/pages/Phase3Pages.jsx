@@ -164,22 +164,28 @@ export function PhoneUsagePage() {
 export function ExercisePage() {
   const [plans, setPlans] = useState([]);
   const [logs, setLogs] = useState([]);
+  const [adherence, setAdherence] = useState(null);
   const [error, setError] = useState(null);
-  const [plan, setPlan] = useState({ name: "", description: "" });
+  const [plan, setPlan] = useState({ name: "", description: "", weekday: 1, exerciseName: "", sets: 3, repetitions: 10 });
   const [log, setLog] = useState({
     dateKey: today(),
     workoutType: "",
     notes: "",
     completed: true,
+    planId: "",
+    durationMinutes: "",
+    calories: "",
   });
   async function load() {
     try {
-      const [p, l] = await Promise.all([
+      const [p, l, a] = await Promise.all([
         api.get("/exercise/plans"),
         api.get("/exercise/logs"),
+        api.get("/exercise/adherence"),
       ]);
       setPlans(p.data.data);
       setLogs(l.data.data);
+      setAdherence(a.data.data);
     } catch (e) {
       setError(e);
     }
@@ -190,8 +196,8 @@ export function ExercisePage() {
   async function createPlan(e) {
     e.preventDefault();
     try {
-      await api.post("/exercise/plans", { ...plan, schedule: [] });
-      setPlan({ name: "", description: "" });
+      await api.post("/exercise/plans", { name: plan.name, description: plan.description, schedule: [{ weekday: Number(plan.weekday), exercises: [{ name: plan.exerciseName || 'Custom workout', sets: Number(plan.sets), repetitions: Number(plan.repetitions) }] }] });
+      setPlan({ name: "", description: "", weekday: 1, exerciseName: "", sets: 3, repetitions: 10 });
       await load();
     } catch (e) {
       setError(e);
@@ -200,8 +206,8 @@ export function ExercisePage() {
   async function createLog(e) {
     e.preventDefault();
     try {
-      await api.post("/exercise/logs", log);
-      setLog({ ...log, workoutType: "", notes: "" });
+      await api.post("/exercise/logs", { ...log, planId: log.planId || undefined, durationMinutes: log.durationMinutes ? Number(log.durationMinutes) : undefined, calories: log.calories ? Number(log.calories) : undefined });
+      setLog({ ...log, workoutType: "", notes: "", planId: "" });
       await load();
     } catch (e) {
       setError(e);
@@ -224,6 +230,9 @@ export function ExercisePage() {
               value={plan.name}
               onChange={(e) => setPlan({ ...plan, name: e.target.value })}
             />
+            <select value={plan.weekday} onChange={(e) => setPlan({ ...plan, weekday: e.target.value })}><option value="0">Sunday</option><option value="1">Monday</option><option value="2">Tuesday</option><option value="3">Wednesday</option><option value="4">Thursday</option><option value="5">Friday</option><option value="6">Saturday</option></select>
+            <input placeholder="First exercise" value={plan.exerciseName} onChange={(e) => setPlan({ ...plan, exerciseName: e.target.value })} />
+            <div className="inline-form"><input type="number" min="0" placeholder="Sets" value={plan.sets} onChange={(e) => setPlan({ ...plan, sets: e.target.value })} /><input type="number" min="0" placeholder="Reps" value={plan.repetitions} onChange={(e) => setPlan({ ...plan, repetitions: e.target.value })} /></div>
             <input
               placeholder="Description"
               value={plan.description}
@@ -237,7 +246,7 @@ export function ExercisePage() {
             <div className="mini-row" key={item._id}>
               <span className="dot green" />
               <span>{item.name}</span>
-              <small>{item.status}</small>
+              <small>{item.status} · {item.schedule?.[0]?.exercises?.[0]?.name || "Custom exercises"}</small>
             </div>
           ))}
           {!plans.length && <p className="muted">No exercise plans yet.</p>}
@@ -250,6 +259,9 @@ export function ExercisePage() {
               value={log.dateKey}
               onChange={(e) => setLog({ ...log, dateKey: e.target.value })}
             />
+            <input type="number" min="0" placeholder="Duration minutes" value={log.durationMinutes} onChange={(e) => setLog({ ...log, durationMinutes: e.target.value })} />
+            <input type="number" min="0" placeholder="Calories (optional)" value={log.calories} onChange={(e) => setLog({ ...log, calories: e.target.value })} />
+            <select value={log.planId} onChange={e => setLog({ ...log, planId: e.target.value })}><option value="">Unplanned / custom workout</option>{plans.filter(item => item.status === "ACTIVE").map(item => <option key={item._id} value={item._id}>{item.name}</option>)}</select>
             <input
               placeholder="Workout type"
               required
@@ -275,6 +287,7 @@ export function ExercisePage() {
           )}
         </section>
       </div>
+      <section className="panel"><div className="row-between"><span className="eyebrow">7-DAY PLAN ADHERENCE</span><strong>{adherence?.adherencePercentage == null ? "—" : `${adherence.adherencePercentage}%`}</strong></div><p className="muted">{adherence?.plannedDays || 0} planned workout days · {adherence?.completedDays || 0} completed days</p><div className="habit-heatmap">{adherence?.rows?.map(row => <i key={row.dateKey} title={`${row.dateKey}: ${row.completed}/${row.planned}`} className={row.completed > 0 ? "complete" : row.planned > 0 ? "partial" : ""} />)}</div></section>
     </div>
   );
 }

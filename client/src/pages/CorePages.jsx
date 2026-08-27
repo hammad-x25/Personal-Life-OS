@@ -270,6 +270,9 @@ export function GoalsPage() {
     unit: "%",
     deadlineKey: "",
   });
+  const [selectedGoal, setSelectedGoal] = useState(null);
+  const [progressValue, setProgressValue] = useState("");
+  const [milestone, setMilestone] = useState({ title: "", description: "", deadlineKey: "" });
   async function add(e) {
     e.preventDefault();
     if (!form.title.trim()) return;
@@ -279,6 +282,22 @@ export function GoalsPage() {
       currentProgress: Number(form.currentProgress),
     });
     setForm({ ...form, title: "" });
+  }
+  async function updateProgress(goal) {
+    await resource.update(goal._id, { currentProgress: Number(progressValue) });
+    setProgressValue("");
+    setSelectedGoal(null);
+  }
+  async function addMilestone(e) {
+    e.preventDefault();
+    if (!selectedGoal || !milestone.title.trim()) return;
+    const response = await api.post(`/goals/${selectedGoal._id}/milestones`, milestone);
+    setSelectedGoal({ ...selectedGoal, milestones: [...(selectedGoal.milestones || []), response.data.data] });
+    setMilestone({ title: "", description: "", deadlineKey: "" });
+  }
+  async function toggleMilestone(item) {
+    const response = await api.patch(`/goals/${selectedGoal._id}/milestones/${item._id}`, { completed: !item.completed });
+    setSelectedGoal({ ...selectedGoal, milestones: selectedGoal.milestones.map(current => current._id === item._id ? response.data.data : current) });
   }
   return (
     <div>
@@ -342,6 +361,11 @@ export function GoalsPage() {
                 {goal.unit || ""}
                 {goal.deadlineKey && ` · due ${goal.deadlineKey}`}
               </p>
+              <div className="inline-form">
+                <input type="number" min="0" value={selectedGoal?._id === goal._id ? progressValue : ""} placeholder="New progress" onChange={e => { setSelectedGoal(goal); setProgressValue(e.target.value); }} />
+                <button className="secondary" onClick={() => updateProgress(goal)}>Save progress</button>
+                <button className="secondary" onClick={() => { setSelectedGoal(goal); setProgressValue(String(goal.currentProgress || 0)); }}>Milestones</button>
+              </div>
             </div>
           );
         })}
@@ -351,6 +375,7 @@ export function GoalsPage() {
           </Empty>
         )}
       </section>
+      {selectedGoal && <section className="panel project-detail"><div className="row-between"><div><span className="eyebrow">GOAL MILESTONES</span><h3>{selectedGoal.title}</h3></div><button className="icon-button" onClick={() => setSelectedGoal(null)}>Close</button></div><form className="grid-form" onSubmit={addMilestone}><input required placeholder="Milestone title" value={milestone.title} onChange={e => setMilestone({ ...milestone, title: e.target.value })} /><input placeholder="Description" value={milestone.description} onChange={e => setMilestone({ ...milestone, description: e.target.value })} /><input type="date" value={milestone.deadlineKey} onChange={e => setMilestone({ ...milestone, deadlineKey: e.target.value })} /><button>Add milestone</button></form><div className="list">{(selectedGoal.milestones || []).map(item => <div className="list-row" key={item._id}><button className="icon-button" onClick={() => toggleMilestone(item)}>{item.completed ? "Undo" : "Done"}</button><span className={`dot ${item.completed ? "green" : ""}`} /><strong>{item.title}</strong><small>{item.deadlineKey || "No deadline"}</small></div>)}</div></section>}
     </div>
   );
 }
@@ -358,13 +383,18 @@ export function GoalsPage() {
 export function HabitsPage() {
     const resource = useResource("/habits");
     const [stats, setStats] = useState({});
+  const [instances, setInstances] = useState([]);
   const [form, setForm] = useState({
     title: "",
     dailyTarget: 30,
     targetUnit: "minutes",
     minimumAcceptable: 10,
     preferredTime: "20:00",
+    frequencyType: "DAILY",
+    weekdays: [1, 2, 3, 4, 5],
+    planEndDateKey: "",
   });
+  const [logValues, setLogValues] = useState({});
   async function add(e) {
     e.preventDefault();
     if (!form.title.trim()) return;
@@ -373,23 +403,24 @@ export function HabitsPage() {
       dailyTarget: Number(form.dailyTarget),
       minimumAcceptable: Number(form.minimumAcceptable),
       planStartDateKey: dateKey(),
+      planEndDateKey: form.planEndDateKey || undefined,
+      frequencyType: form.frequencyType,
+      weekdays: form.weekdays,
       status: "ACTIVE",
     });
     setForm({ ...form, title: "" });
   }
     async function log(habit) {
-    const actual = window.prompt(
-      `Actual ${habit.targetUnit || "value"} for ${habit.title}?`,
-      String(habit.dailyTarget || 0),
-    );
-    if (actual === null) return;
+    const actual = logValues[habit._id];
+    if (actual === undefined || actual === "") return;
     await api.post(`/habits/${habit._id}/log`, {
       dateKey: dateKey(),
       actualValue: Number(actual),
     });
+      setLogValues(current => ({ ...current, [habit._id]: "" }));
       await resource.reload();
     }
-    useEffect(() => { Promise.all(resource.items.map(async habit => [habit._id, (await api.get(`/habits/${habit._id}/stats`)).data.data])).then(entries => setStats(Object.fromEntries(entries))).catch(() => {}); }, [resource.items]);
+    useEffect(() => { Promise.all([Promise.all(resource.items.map(async habit => [habit._id, (await api.get(`/habits/${habit._id}/stats`)).data.data])), api.get('/habits/instances')]).then(([entries, response]) => { setStats(Object.fromEntries(entries)); setInstances(response.data.data); }).catch(() => {}); }, [resource.items]);
   return (
     <div>
       <PageHeader
@@ -422,9 +453,17 @@ export function HabitsPage() {
               setForm({ ...form, preferredTime: e.target.value })
             }
           />
+          <select value={form.frequencyType} onChange={e => setForm({ ...form, frequencyType: e.target.value })}>
+            <option value="DAILY">Every day</option>
+            <option value="WEEKLY">Weekly</option>
+            <option value="CUSTOM">Selected days</option>
+          </select>
+          <input type="date" value={form.planEndDateKey} onChange={e => setForm({ ...form, planEndDateKey: e.target.value })} />
+          {form.frequencyType !== "DAILY" && <div className="weekday-picker">{['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map((label, day) => <button type="button" className={form.weekdays.includes(day) ? "selected" : "secondary"} key={label} onClick={() => setForm({ ...form, weekdays: form.weekdays.includes(day) ? form.weekdays.filter(value => value !== day) : [...form.weekdays, day].sort() })}>{label}</button>)}</div>}
           <button>Start habit</button>
         </form>
       </section>
+      <section className="panel"><div className="row-between"><span className="eyebrow">GENERATED HABIT INSTANCES</span><small>{instances.length} scheduled records</small></div>{instances.slice(0, 10).map(item => <div className="mini-row" key={item._id}><span className={`dot ${item.status === 'COMPLETED' ? 'green' : ''}`} /><span>{item.habitId?.title || 'Habit'}</span><small>{item.dateKey} · {item.status}</small></div>)}{!instances.length && <p className="muted">Scheduled habit instances will appear here.</p>}</section>
       <section className="list">
         {resource.items.map((habit) => (
           <div className="list-row" key={habit._id}>
@@ -437,9 +476,10 @@ export function HabitsPage() {
               </small>
               {stats[habit._id] && <div className="habit-stats"><span>{stats[habit._id].currentStreak} day streak</span><span>{Math.round(stats[habit._id].completionRate)}% complete</span><div className="habit-heatmap">{stats[habit._id].heatmap.slice(-35).map(day => <i key={day.dateKey} title={`${day.dateKey}: ${day.completionPercentage}%`} className={day.completionPercentage >= 100 ? 'complete' : day.completionPercentage > 0 ? 'partial' : ''} />)}</div></div>}
             </div>
-            <button className="secondary" onClick={() => log(habit)}>
-              Log today
-            </button>
+            <div className="inline-form">
+              <input type="number" min="0" placeholder={`Actual ${habit.targetUnit || "value"}`} value={logValues[habit._id] || ""} onChange={e => setLogValues(current => ({ ...current, [habit._id]: e.target.value }))} />
+              <button className="secondary" onClick={() => log(habit)}>Log today</button>
+            </div>
             <button
               className="icon-button"
               onClick={() => resource.remove(habit._id)}
@@ -458,20 +498,27 @@ export function HabitsPage() {
 
 export function TimetablePage() {
   const resource = useResource("/timetable");
+  const [completion, setCompletion] = useState(null);
+  const [error, setError] = useState("");
   const [form, setForm] = useState({
     title: "",
     dateKey: dateKey(),
     startTime: "09:00",
     endTime: "10:00",
     category: "Focus",
+    recurrenceType: "NONE",
+    weekdays: [1, 2, 3, 4, 5],
+    recurrenceEndDateKey: "",
   });
   async function add(e) {
     e.preventDefault();
     if (!form.title.trim()) return;
-    await resource.create(form);
+    const { recurrenceType, weekdays, recurrenceEndDateKey, ...event } = form;
+    await resource.create({ ...event, recurrence: recurrenceType === "NONE" ? { type: "NONE" } : { type: recurrenceType, weekdays: recurrenceType === "CUSTOM" ? weekdays : undefined, endDateKey: recurrenceEndDateKey || undefined } });
+    if (recurrenceType !== "NONE") { await api.post("/timetable/sync-recurring"); await resource.reload(); }
     setForm({ ...form, title: "" });
   }
-  async function complete(event) { const actualStartTime = window.prompt('Actual start time (HH:mm)', event.startTime); if (!actualStartTime) return; const actualEndTime = window.prompt('Actual end time (HH:mm)', event.endTime); if (!actualEndTime) return; await api.post(`/timetable/${event._id}/complete`, { actualStartTime, actualEndTime, status: 'COMPLETED' }); await resource.reload(); }
+  async function complete(e) { e.preventDefault(); try { await api.post(`/timetable/${completion.id}/complete`, { actualStartTime: completion.actualStartTime, actualEndTime: completion.actualEndTime, status: completion.status }); setCompletion(null); setError(""); await resource.reload(); } catch (e) { setError(e.response?.data?.message || "Could not record timetable adherence"); } }
   return (
     <div>
       <PageHeader
@@ -479,6 +526,7 @@ export function TimetablePage() {
         title="Timetable"
         description="Give important work a place to happen."
       />
+      <ErrorMessage error={error || resource.error} />
       <section className="panel form-panel">
         <form className="grid-form" onSubmit={add}>
           <input
@@ -501,6 +549,9 @@ export function TimetablePage() {
             value={form.endTime}
             onChange={(e) => setForm({ ...form, endTime: e.target.value })}
           />
+          <select value={form.recurrenceType} onChange={e => setForm({ ...form, recurrenceType: e.target.value })}><option value="NONE">One time</option><option value="DAILY">Every day</option><option value="WEEKLY">Weekly</option><option value="CUSTOM">Selected weekdays</option></select>
+          {form.recurrenceType !== "NONE" && <input type="date" value={form.recurrenceEndDateKey} onChange={e => setForm({ ...form, recurrenceEndDateKey: e.target.value })} />}
+          {form.recurrenceType === "CUSTOM" && <div className="weekday-picker">{['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map((label, day) => <button type="button" className={form.weekdays.includes(day) ? "selected" : "secondary"} key={label} onClick={() => setForm({ ...form, weekdays: form.weekdays.includes(day) ? form.weekdays.filter(value => value !== day) : [...form.weekdays, day].sort() })}>{label}</button>)}</div>}
           <button>Add event</button>
         </form>
       </section>
@@ -512,11 +563,11 @@ export function TimetablePage() {
               <strong>{event.title}</strong>
               <small>
                 {event.dateKey} · {event.startTime}–{event.endTime} ·{" "}
-                {event.category}
+                {event.category}{event.recurrence?.type && event.recurrence.type !== 'NONE' ? ` · ${event.recurrence.type.toLowerCase()}` : ''}
               </small>
             </div>
               {event.adherencePercentage != null && <small className="success">Adherence {Math.round(event.adherencePercentage)}%</small>}
-              {event.status !== 'COMPLETED' && <button className="secondary" onClick={() => complete(event)}>Record actual</button>}
+              {event.status !== 'COMPLETED' && (completion?.id === event._id ? <form className="inline-form" onSubmit={complete}><input type="time" required value={completion.actualStartTime} onChange={e => setCompletion({ ...completion, actualStartTime: e.target.value })} /><input type="time" required value={completion.actualEndTime} onChange={e => setCompletion({ ...completion, actualEndTime: e.target.value })} /><select value={completion.status} onChange={e => setCompletion({ ...completion, status: e.target.value })}><option value="COMPLETED">Completed</option><option value="PARTIAL">Partial</option><option value="MISSED">Missed</option></select><button>Save</button><button type="button" className="secondary" onClick={() => setCompletion(null)}>Cancel</button></form> : <button className="secondary" onClick={() => setCompletion({ id: event._id, actualStartTime: event.startTime, actualEndTime: event.endTime, status: 'COMPLETED' })}>Record actual</button>)}
               <button
               className="icon-button"
               onClick={() => resource.remove(event._id)}

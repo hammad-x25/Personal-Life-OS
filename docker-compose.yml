@@ -1,0 +1,38 @@
+services:
+  mongo:
+    image: mongo:8
+    restart: unless-stopped
+    volumes:
+      - lifeos-mongo:/data/db
+    ports:
+      - "27017:27017"
+
+  api:
+    build:
+      context: ./server
+    restart: unless-stopped
+    depends_on:
+      - mongo
+    environment:
+      NODE_ENV: production
+      PORT: 5000
+      MONGODB_URI: mongodb://mongo:27017/life_os
+      CLIENT_URL: http://localhost
+      COOKIE_SECURE: "false"
+      ACCESS_TOKEN_SECRET: change-this-production-secret-to-32-plus-characters
+      REFRESH_TOKEN_SECRET: change-this-refresh-secret-to-32-plus-characters
+      ENABLE_JOBS: "true"
+    ports:
+      - "5000:5000"
+
+  client:
+    build:
+      context: ./client
+    restart: unless-stopped
+    depends_on:
+      - api
+    ports:
+      - "80:80"
+
+volumes:
+  lifeos-mongo:

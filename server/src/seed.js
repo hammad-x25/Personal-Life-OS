@@ -6,6 +6,7 @@ import Task from './models/Task.js';
 import Goal from './models/Goal.js';
 import Habit from './models/Habit.js';
 import HabitLog from './models/HabitLog.js';
+import HabitInstance from './models/HabitInstance.js';
 import Expense from './models/Expense.js';
 import PhoneUsage from './models/PhoneUsage.js';
 import SpendingAccountability from './models/SpendingAccountability.js';
@@ -28,7 +29,7 @@ const user = await User.findOneAndUpdate(
   { upsert: true, new: true }
 );
 
-const owned = [Task, Goal, Habit, HabitLog, Expense, PhoneUsage, SpendingAccountability, Project, ProjectMilestone, ExercisePlan, ExerciseLog, TimetableEvent, DailyPerformance, TimelineEvent, Budget, FinancialGoal];
+const owned = [Task, Goal, Habit, HabitLog, HabitInstance, Expense, PhoneUsage, SpendingAccountability, Project, ProjectMilestone, ExercisePlan, ExerciseLog, TimetableEvent, DailyPerformance, TimelineEvent, Budget, FinancialGoal];
 for (const Model of owned) await Model.deleteMany({ userId: user._id });
 
 const dates = Array.from({ length: 14 }, (_, index) => shiftDateKey(today, -13 + index));

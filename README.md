@@ -38,6 +38,23 @@ npm run dev
 
 The client runs at `http://localhost:5173` and the API at `http://localhost:5000`.
 
+## Containerized run
+
+For a production-like local stack with MongoDB, API, and Nginx frontend:
+
+```powershell
+docker compose up --build
+```
+
+The frontend is served at `http://localhost`, the API at `http://localhost:5000`, and MongoDB uses the `lifeos-mongo` named volume. Replace the example production secrets before deploying anywhere public.
+
+Health endpoints:
+
+```text
+GET /health/live
+GET /health/ready
+```
+
 To enable hourly local automation for daily snapshots, period summaries, and reminders:
 
 ```powershell

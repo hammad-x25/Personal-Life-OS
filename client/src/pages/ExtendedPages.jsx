@@ -16,6 +16,7 @@ const today = () =>
   new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Karachi" }).format(
     new Date(),
   );
+const DEFAULT_FINANCE_CATEGORIES = ['Food', 'Transport', 'Education', 'Entertainment', 'Shopping', 'Bills', 'Health', 'Subscriptions', 'Family', 'Travel', 'Other'];
 function Header({ eyebrow = "MEASURE", title, description, children }) {
   return (
     <div className="page-header">
@@ -65,24 +66,34 @@ function Chart({ data, dataKey = "score", color = "#a4f17d" }) {
 export function FinancePage() {
   const [items, setItems] = useState([]);
   const [summary, setSummary] = useState(null);
+  const [customCategories, setCustomCategories] = useState([]);
   const [form, setForm] = useState({
     amount: "",
     category: "Food",
     description: "",
     dateKey: today(),
     type: "EXPENSE",
+    subcategory: "",
+    paymentMethod: "",
+    notes: "",
+    isRecurring: false,
   });
   const [error, setError] = useState(null);
   const [budgetForm, setBudgetForm] = useState({ name: "Monthly spending", category: "", amount: "" });
   const [goalForm, setGoalForm] = useState({ title: "", targetAmount: "", deadlineKey: "" });
+  const [categoryForm, setCategoryForm] = useState({ name: "", type: "EXPENSE" });
+  const [filters, setFilters] = useState({ startDateKey: `${today().slice(0, 7)}-01`, endDateKey: today(), type: "" });
   async function load() {
     try {
-      const [expenses, finance] = await Promise.all([
-        api.get("/expenses"),
-        api.get("/analytics/finance"),
+      const params = { ...filters, type: filters.type || undefined };
+      const [expenses, finance, categories] = await Promise.all([
+        api.get("/finance/transactions", { params }),
+        api.get("/analytics/finance", { params }),
+        api.get("/finance/categories"),
       ]);
-      setItems(expenses.data.data);
+      setItems(expenses.data.data.items);
       setSummary(finance.data.data);
+      setCustomCategories(categories.data.data);
     } catch (e) {
       setError(e);
     }
@@ -100,9 +111,11 @@ export function FinancePage() {
       setError(e);
     }
   }
+  async function createCategory(e) { e.preventDefault(); try { const response = await api.post('/finance/categories', categoryForm); setCustomCategories(current => [...current, response.data.data]); setForm(current => ({ ...current, category: response.data.data.name, type: response.data.data.type })); setCategoryForm({ name: '', type: 'EXPENSE' }); } catch (e) { setError(e); } }
   async function createBudget(e) { e.preventDefault(); try { await api.post('/budgets', { ...budgetForm, amount: Number(budgetForm.amount), category: budgetForm.category || null, periodType: 'MONTHLY' }); setBudgetForm({ name: 'Monthly spending', category: '', amount: '' }); await load(); } catch (e) { setError(e); } }
   async function createGoal(e) { e.preventDefault(); try { await api.post('/finance-goals', { ...goalForm, targetAmount: Number(goalForm.targetAmount) }); setGoalForm({ title: '', targetAmount: '', deadlineKey: '' }); await load(); } catch (e) { setError(e); } }
   const total = summary?.totals?.find((x) => x._id === "EXPENSE")?.total || 0;
+  const income = summary?.totals?.find((x) => x._id === "INCOME")?.total || 0;
   return (
     <div>
       <Header
@@ -118,14 +131,25 @@ export function FinancePage() {
           <p className="muted">Current selected window</p>
         </div>
         <div className="card">
+          <span className="eyebrow">NET BALANCE</span>
+          <strong>Rs. {Number(summary?.netBalance || 0).toLocaleString()}</strong>
+          <p className="muted">Income minus expenses</p>
+        </div>
+        <div className="card">
+          <span className="eyebrow">DAILY AVERAGE</span>
+          <strong>Rs. {Math.round(summary?.averageDailySpending || 0).toLocaleString()}</strong>
+          <p className="muted">Average spending day</p>
+        </div>
+        <div className="card">
           <span className="eyebrow">TOP CATEGORY</span>
           <strong>{summary?.categories?.[0]?._id || "—"}</strong>
           <p className="muted">Highest spending category</p>
         </div>
       </div>
       <section className="panel form-panel">
-        <span className="eyebrow">QUICK EXPENSE</span>
+        <span className="eyebrow">ADD TRANSACTION</span>
         <form className="grid-form" onSubmit={submit}>
+          <select value={form.type} onChange={e => setForm({ ...form, type: e.target.value })}><option value="EXPENSE">Expense</option><option value="INCOME">Income</option></select>
           <input
             type="number"
             min="0"
@@ -134,12 +158,9 @@ export function FinancePage() {
             value={form.amount}
             onChange={(e) => setForm({ ...form, amount: e.target.value })}
           />
-          <input
-            required
-            placeholder="Category"
-            value={form.category}
-            onChange={(e) => setForm({ ...form, category: e.target.value })}
-          />
+          <select required value={form.category} onChange={e => setForm({ ...form, category: e.target.value })}>{DEFAULT_FINANCE_CATEGORIES.map(category => <option key={category}>{category}</option>)}{customCategories.filter(item => item.type === form.type).map(category => <option key={category._id}>{category.name}</option>)}</select>
+          <input placeholder="Subcategory" value={form.subcategory} onChange={e => setForm({ ...form, subcategory: e.target.value })} />
+          <input placeholder="Payment method" value={form.paymentMethod} onChange={e => setForm({ ...form, paymentMethod: e.target.value })} />
           <input
             placeholder="Description"
             value={form.description}
@@ -150,10 +171,14 @@ export function FinancePage() {
             value={form.dateKey}
             onChange={(e) => setForm({ ...form, dateKey: e.target.value })}
           />
+          <input placeholder="Notes" value={form.notes} onChange={e => setForm({ ...form, notes: e.target.value })} />
+          <label className="check-label"><input type="checkbox" checked={form.isRecurring} onChange={e => setForm({ ...form, isRecurring: e.target.checked })} /> Recurring</label>
           <button>Record</button>
         </form>
       </section>
-      <div className="dashboard-columns"><section className="panel"><span className="eyebrow">OPTIONAL BUDGET</span><form className="grid-form" onSubmit={createBudget}><input required placeholder="Budget name" value={budgetForm.name} onChange={e => setBudgetForm({ ...budgetForm, name: e.target.value })} /><input placeholder="Category or blank for all" value={budgetForm.category} onChange={e => setBudgetForm({ ...budgetForm, category: e.target.value })} /><input type="number" min="0.01" required placeholder="Monthly amount" value={budgetForm.amount} onChange={e => setBudgetForm({ ...budgetForm, amount: e.target.value })} /><button>Set budget</button></form>{summary?.budgets?.map(item => <div className="goal-row" key={item._id}><div><strong>{item.name}</strong><small>Rs. {Number(item.spent).toLocaleString()} / {Number(item.amount).toLocaleString()}</small></div><div className="progress"><span style={{ width: `${Math.min(100, item.usagePercentage)}%` }} /></div></div>)}</section><section className="panel"><span className="eyebrow">FINANCIAL GOAL</span><form className="grid-form" onSubmit={createGoal}><input required placeholder="Goal title" value={goalForm.title} onChange={e => setGoalForm({ ...goalForm, title: e.target.value })} /><input type="number" min="0.01" required placeholder="Target amount" value={goalForm.targetAmount} onChange={e => setGoalForm({ ...goalForm, targetAmount: e.target.value })} /><input type="date" value={goalForm.deadlineKey} onChange={e => setGoalForm({ ...goalForm, deadlineKey: e.target.value })} /><button>Create goal</button></form>{summary?.financialGoals?.map(item => <div className="goal-row" key={item._id}><div><strong>{item.title}</strong><small>Rs. {Number(item.currentAmount).toLocaleString()} / {Number(item.targetAmount).toLocaleString()}</small></div><div className="progress"><span style={{ width: `${Math.min(100, item.currentAmount / item.targetAmount * 100)}%` }} /></div></div>)}</section></div>
+      <div className="dashboard-columns"><section className="panel"><span className="eyebrow">OPTIONAL BUDGET</span><form className="grid-form" onSubmit={createBudget}><input required placeholder="Budget name" value={budgetForm.name} onChange={e => setBudgetForm({ ...budgetForm, name: e.target.value })} /><input placeholder="Category or blank for all" value={budgetForm.category} onChange={e => setBudgetForm({ ...budgetForm, category: e.target.value })} /><input type="number" min="0.01" required placeholder="Monthly amount" value={budgetForm.amount} onChange={e => setBudgetForm({ ...budgetForm, amount: e.target.value })} /><button>Set budget</button></form>{summary?.budgets?.map(item => <div className="goal-row" key={item._id}><div><strong>{item.name}</strong><small>Rs. {Number(item.spent).toLocaleString()} / {Number(item.amount).toLocaleString()}</small></div><div className="progress"><span style={{ width: `${Math.min(100, item.usagePercentage)}%` }} /></div></div>)}</section><section className="panel"><span className="eyebrow">CUSTOM CATEGORY</span><form className="grid-form" onSubmit={createCategory}><input required placeholder="Category name" value={categoryForm.name} onChange={e => setCategoryForm({ ...categoryForm, name: e.target.value })} /><select value={categoryForm.type} onChange={e => setCategoryForm({ ...categoryForm, type: e.target.value })}><option value="EXPENSE">Expense</option><option value="INCOME">Income</option></select><button>Create category</button></form><small>{customCategories.length} custom categories</small></section></div>
+      <section className="panel"><div className="row-between"><span className="eyebrow">FILTER TRANSACTIONS</span><strong>Income Rs. {income.toLocaleString()}</strong></div><div className="inline-form"><input type="date" value={filters.startDateKey} onChange={e => setFilters({ ...filters, startDateKey: e.target.value })} /><input type="date" value={filters.endDateKey} onChange={e => setFilters({ ...filters, endDateKey: e.target.value })} /><select value={filters.type} onChange={e => setFilters({ ...filters, type: e.target.value })}><option value="">All types</option><option value="EXPENSE">Expenses</option><option value="INCOME">Income</option></select><button onClick={load}>Apply</button></div></section>
+      <section className="panel"><div className="row-between"><span className="eyebrow">SPENDING TREND</span><small>{summary?.highestSpendingDay ? `Highest: ${summary.highestSpendingDay._id}` : "No spending yet"}</small></div><Chart data={summary?.trend || []} dataKey="total" color="#f1c36b" /></section>
       <section className="panel">
         <span className="eyebrow">RECENT RECORDS</span>
         {items.slice(0, 20).map((x) => (
@@ -300,6 +325,10 @@ export function CommandDashboard() {
 
 export function ProjectsPage() {
   const [projects, setProjects] = useState([]);
+  const [selectedProject, setSelectedProject] = useState(null);
+  const [detail, setDetail] = useState(null);
+  const [milestone, setMilestone] = useState({ title: '', dateKey: '' });
+  const [projectTaskTitle, setProjectTaskTitle] = useState('');
   const [form, setForm] = useState({
     name: "",
     description: "",
@@ -316,6 +345,10 @@ export function ProjectsPage() {
   useEffect(() => {
     load();
   }, []);
+  async function openProject(project) { setSelectedProject(project); try { setDetail((await api.get(`/projects/${project._id}/timeline`)).data.data); } catch (e) { setError(e); } }
+  async function addMilestone(e) { e.preventDefault(); if (!selectedProject || !milestone.title.trim()) return; try { await api.post(`/projects/${selectedProject._id}/milestones`, milestone); setMilestone({ title: '', dateKey: '' }); await openProject(selectedProject); } catch (e) { setError(e); } }
+  async function addProjectTask(e) { e.preventDefault(); if (!selectedProject || !projectTaskTitle.trim()) return; try { await api.post('/tasks', { title: projectTaskTitle, category: 'WORK', projectId: selectedProject._id, priority: 'MEDIUM' }); setProjectTaskTitle(''); await openProject(selectedProject); } catch (e) { setError(e); } }
+  async function toggleMilestone(item) { try { await api.patch(`/projects/${selectedProject._id}/milestones/${item._id}`, { completed: !item.completed }); await openProject(selectedProject); } catch (e) { setError(e); } }
   async function submit(e) {
     e.preventDefault();
     try {
@@ -368,6 +401,7 @@ export function ProjectsPage() {
                 ? `Deadline ${project.deadlineKey}`
                 : "No deadline"}
             </small>
+            <button className="secondary" onClick={() => openProject(project)}>Open timeline</button>
             <button
               className="secondary"
               onClick={async () => {
@@ -387,19 +421,20 @@ export function ProjectsPage() {
           </div>
         )}
       </section>
+      {selectedProject && <section className="panel project-detail"><div className="row-between"><div><span className="eyebrow">PROJECT TIMELINE</span><h3>{selectedProject.name}</h3></div><button className="icon-button" onClick={() => { setSelectedProject(null); setDetail(null); }}>Close</button></div><form className="inline-form" onSubmit={addMilestone}><input required placeholder="Milestone title" value={milestone.title} onChange={e => setMilestone({ ...milestone, title: e.target.value })} /><input type="date" value={milestone.dateKey} onChange={e => setMilestone({ ...milestone, dateKey: e.target.value })} /><button>Add milestone</button></form><form className="inline-form" onSubmit={addProjectTask}><input required placeholder="Add linked work task" value={projectTaskTitle} onChange={e => setProjectTaskTitle(e.target.value)} /><button className="secondary">Add task</button></form><div className="dashboard-columns"><div><span className="eyebrow">MILESTONES</span>{detail?.milestones?.map(item => <div className="mini-row" key={item._id}><button className="icon-button" onClick={() => toggleMilestone(item)}>{item.completed ? 'Undo' : 'Done'}</button><span className={`dot ${item.completed ? 'green' : ''}`} /><span>{item.title}</span><small>{item.dateKey || 'No date'}</small></div>)}</div><div><span className="eyebrow">LINKED TASKS</span>{detail?.tasks?.map(item => <div className="mini-row" key={item._id}><span className={`dot ${item.status === 'COMPLETED' ? 'green' : ''}`} /><span>{item.title}</span><small>{item.status}</small></div>)}</div></div></section>}
     </div>
   );
 }
 
 export function WorkPage() {
   const [tasks, setTasks] = useState([]);
+  const [projects, setProjects] = useState([]);
   const [title, setTitle] = useState("");
+  const [projectId, setProjectId] = useState("");
+  const [dueDateKey, setDueDateKey] = useState("");
+  const [error, setError] = useState(null);
   async function load() {
-    setTasks(
-      (await api.get("/tasks")).data.data.filter(
-        (item) => item.category === "WORK",
-      ),
-    );
+    try { const [taskResponse, projectResponse] = await Promise.all([api.get("/tasks"), api.get("/projects")]); setTasks(taskResponse.data.data.filter(item => item.category === "WORK")); setProjects(projectResponse.data.data); } catch (e) { setError(e); }
   }
   useEffect(() => {
     load();
@@ -407,8 +442,9 @@ export function WorkPage() {
   async function add(e) {
     e.preventDefault();
     if (!title.trim()) return;
-    await api.post("/tasks", { title, category: "WORK", priority: "MEDIUM" });
+    try { await api.post("/tasks", { title, category: "WORK", priority: "MEDIUM", projectId: projectId || undefined, dueDateKey: dueDateKey || undefined }); } catch (e) { setError(e); return; }
     setTitle("");
+    setDueDateKey("");
     load();
   }
   return (
@@ -418,6 +454,7 @@ export function WorkPage() {
         title="Work"
         description="Keep professional execution visible without mixing it into every personal task."
       />
+      <ErrorBox error={error} />
       <section className="panel form-panel">
         <form className="inline-form" onSubmit={add}>
           <input
@@ -425,6 +462,8 @@ export function WorkPage() {
             value={title}
             onChange={(e) => setTitle(e.target.value)}
           />
+          <select value={projectId} onChange={e => setProjectId(e.target.value)}><option value="">No project</option>{projects.map(project => <option key={project._id} value={project._id}>{project.name}</option>)}</select>
+          <input type="date" value={dueDateKey} onChange={e => setDueDateKey(e.target.value)} />
           <button>Add work task</button>
         </form>
       </section>
@@ -444,7 +483,7 @@ export function WorkPage() {
             </button>
             <div className="row-main">
               <strong>{task.title}</strong>
-              <small>{task.status}</small>
+              <small>{task.status}{task.projectId ? ` · ${projects.find(project => project._id === task.projectId)?.name || 'Project'}` : ''}{task.dueDateKey ? ` · due ${task.dueDateKey}` : ''}</small>
             </div>
           </div>
         ))}
@@ -500,16 +539,20 @@ export function AccountabilityHistoryPage() {
 
 export function NotificationsPage() {
   const [items, setItems] = useState([]);
+  const [filter, setFilter] = useState('ALL');
+  const [error, setError] = useState(null);
   async function load() {
-    setItems((await api.get("/notifications")).data.data);
+    try { setItems((await api.get("/notifications")).data.data); setError(null); } catch (e) { setError(e); }
   }
   useEffect(() => {
     load();
   }, []);
   async function mark(id) {
-    await api.patch(`/notifications/${id}/read`);
-    load();
+    try { await api.patch(`/notifications/${id}/read`); await load(); } catch (e) { setError(e); }
   }
+  async function dismiss(id) { try { await api.patch(`/notifications/${id}/dismiss`); await load(); } catch (e) { setError(e); } }
+  async function markAll() { try { await api.patch('/notifications/read-all'); await load(); } catch (e) { setError(e); } }
+  const visibleItems = filter === 'UNREAD' ? items.filter(item => !item.readAt && item.status !== 'DISMISSED') : filter === 'DISMISSED' ? items.filter(item => item.status === 'DISMISSED') : items.filter(item => item.status !== 'DISMISSED');
   return (
     <div>
       <Header
@@ -517,22 +560,25 @@ export function NotificationsPage() {
         title="Notifications"
         description="Small prompts that help the operating loop stay closed."
       />
+      <ErrorBox error={error} />
+      <div className="actions"><select value={filter} onChange={e => setFilter(e.target.value)}><option value="ALL">Active</option><option value="UNREAD">Unread</option><option value="DISMISSED">Dismissed</option></select><button className="secondary" onClick={markAll}>Mark all read</button></div>
       <section className="list">
-        {items.map((item) => (
+        {visibleItems.map((item) => (
           <div className="list-row" key={item._id}>
-            <div className="dot" />
+            <div className={`dot ${item.readAt ? '' : 'green'}`} />
             <div className="row-main">
               <strong>{item.title}</strong>
-              <small>{item.message}</small>
+              <small>{item.message} · {item.type} · {item.scheduledFor ? new Date(item.scheduledFor).toLocaleString() : 'Now'}</small>
             </div>
             {!item.readAt && (
               <button className="secondary" onClick={() => mark(item._id)}>
                 Mark read
               </button>
             )}
+            {item.status !== 'DISMISSED' && <button className="icon-button" onClick={() => dismiss(item._id)}>Dismiss</button>}
           </div>
         ))}
-        {!items.length && (
+        {!visibleItems.length && (
           <div className="panel">
             <p className="muted">No reminders right now.</p>
           </div>
@@ -549,7 +595,7 @@ export function AnalyticsPage() {
   const [correlation, setCorrelation] = useState(null);
   const [range, setRange] = useState('WEEKLY');
   const [error, setError] = useState(null);
-  useEffect(() => { Promise.all([api.get("/analytics/daily"), api.get("/analytics/growth"), api.get(`/dashboard/${range.toLowerCase()}`), api.get("/analytics/correlations")]).then(([d, g, p, c]) => { setDaily(d.data.data); setGrowth(g.data.data); setPeriod(p.data.data); setCorrelation(c.data.data); }).catch(setError); }, [range]);
+  useEffect(() => { Promise.all([api.get("/analytics/daily"), api.get("/analytics/growth"), api.get(`/dashboard/${range.toLowerCase()}`), api.get("/analytics/correlations")]).then(([d, g, p, c]) => { setDaily(d.data.data); setGrowth(p.data.data.growth || g.data.data); setPeriod(p.data.data); setCorrelation(c.data.data); }).catch(setError); }, [range]);
   return (
     <div>
       <Header
@@ -577,10 +623,12 @@ export function AnalyticsPage() {
         </div>
         <div className="card"><span className="eyebrow">PERIOD SCORE</span><strong>{period?.score == null ? '—' : `${Math.round(period.score)}%`}</strong><p className="muted">{range.toLowerCase()} performance</p></div>
       </div>
+      <section className="grid"><div className="card"><span className="eyebrow">TASKS</span><strong>{period?.metrics?.tasks?.completionRate == null ? "—" : `${Math.round(period.metrics.tasks.completionRate)}%`}</strong><p className="muted">{period?.metrics?.tasks?.completed || 0} of {period?.metrics?.tasks?.total || 0} completed</p></div><div className="card"><span className="eyebrow">HABITS</span><strong>{period?.metrics?.habits?.completionRate == null ? "—" : `${Math.round(period.metrics.habits.completionRate)}%`}</strong><p className="muted">Scheduled habit consistency</p></div><div className="card"><span className="eyebrow">EXERCISE</span><strong>{period?.metrics?.exercise?.workoutDays || 0}</strong><p className="muted">Workout days</p></div><div className="card"><span className="eyebrow">PHONE</span><strong>{period?.metrics?.phoneUsage?.averageMinutes == null ? "—" : `${Math.round(period.metrics.phoneUsage.averageMinutes)}m`}</strong><p className="muted">Average daily usage</p></div></section>
       <section className="panel">
         <span className="eyebrow">PRODUCTIVITY OVER TIME</span>
-        <Chart data={daily} />
+        <Chart data={period?.performance?.length ? period.performance : daily} />
       </section>
+      <section className="panel"><span className="eyebrow">PERIOD EXECUTION</span><div className="mini-row"><span>Timetable adherence</span><strong>{period?.metrics?.timetable?.adherencePercentage == null ? "—" : `${Math.round(period.metrics.timetable.adherencePercentage)}%`}</strong></div>{period?.metrics?.projects?.map(project => <div className="mini-row" key={project._id}><span>{project.name}</span><strong>{project.progressPercentage}%</strong><small>{project.taskCompleted}/{project.taskTotal} tasks</small></div>)}</section>
       <section className="panel"><span className="eyebrow">CORRELATION OBSERVATIONS</span>{correlation?.observations?.map(item => <div className="mini-row" key={item.type}><span className="dot green" /><span>{item.message}</span><small>{item.type === 'PHONE_USAGE' ? `${item.lowUsageAverage == null ? '—' : Math.round(item.lowUsageAverage)}% vs ${item.highUsageAverage == null ? '—' : Math.round(item.highUsageAverage)}%` : `${item.exerciseAverage == null ? '—' : Math.round(item.exerciseAverage)}% with exercise`}</small></div>)}</section>
     </div>
   );
@@ -624,6 +672,8 @@ export function TimelinePage() {
 
 export function ReviewsPage() {
   const [reviews, setReviews] = useState([]);
+  const [filter, setFilter] = useState('ALL');
+  const [selected, setSelected] = useState(null);
   const [error, setError] = useState(null);
   async function load() {
     try {
@@ -643,6 +693,7 @@ export function ReviewsPage() {
       setError(e);
     }
   }
+  const visibleReviews = filter === 'ALL' ? reviews : reviews.filter(review => review.reviewType === filter);
   return (
     <div>
       <Header
@@ -652,6 +703,7 @@ export function ReviewsPage() {
       />
       <ErrorBox error={error} />
       <div className="actions">
+        <select value={filter} onChange={(e) => setFilter(e.target.value)}><option value="ALL">All reviews</option><option value="DAILY">Daily</option><option value="WEEKLY">Weekly</option><option value="MONTHLY">Monthly</option></select>
         <button onClick={() => generate("daily")}>Generate daily review</button>
         <button className="secondary" onClick={() => generate("weekly")}>
           Generate weekly
@@ -661,8 +713,8 @@ export function ReviewsPage() {
         </button>
       </div>
       <section className="list">
-        {reviews.map((review) => (
-          <article className="panel" key={review._id}>
+        {visibleReviews.map((review) => (
+          <article className="panel review-card" key={review._id} onClick={() => setSelected(review)}>
             <span className="eyebrow">
               {review.reviewType} · {review.periodKey}
             </span>
@@ -670,6 +722,7 @@ export function ReviewsPage() {
             <p className="muted">
               Priority: {review.priority || "Not specified"}
             </p>
+            <small className="muted">{review.model || "local"} · {review.validationStatus || "legacy review"}</small>
             <strong>Recommendations</strong>
             <ul>
               {review.recommendations?.map((item, i) => (
@@ -678,7 +731,7 @@ export function ReviewsPage() {
             </ul>
           </article>
         ))}
-        {!reviews.length && (
+        {!visibleReviews.length && (
           <div className="panel">
             <p className="muted">
               Generate a review after recording a little data.
@@ -686,6 +739,7 @@ export function ReviewsPage() {
           </div>
         )}
       </section>
+      {selected && <div className="modal-backdrop" onMouseDown={() => setSelected(null)}><article className="modal" onMouseDown={(e) => e.stopPropagation()}><div className="row-between"><div><span className="eyebrow">{selected.reviewType} REVIEW</span><h2>{selected.periodKey}</h2></div><button className="icon-button" onClick={() => setSelected(null)}>Close</button></div><p>{selected.summary}</p><div className="dashboard-columns"><div><strong>Strengths</strong><ul>{selected.strengths?.map((item, i) => <li key={i}>{item}</li>)}</ul></div><div><strong>Weaknesses</strong><ul>{selected.weaknesses?.map((item, i) => <li key={i}>{item}</li>)}</ul></div></div><strong>Recommendations</strong><ul>{selected.recommendations?.map((item, i) => <li key={i}>{item}</li>)}</ul></article></div>}
     </div>
   );
 }

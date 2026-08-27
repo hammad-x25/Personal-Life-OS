@@ -12,4 +12,5 @@ const schema = new mongoose.Schema({
 }, { timestamps: true });
 
 schema.index({ userId: 1, readAt: 1 });
+schema.index({ userId: 1, status: 1, scheduledFor: -1 });
 export default mongoose.model('Notification', schema);
