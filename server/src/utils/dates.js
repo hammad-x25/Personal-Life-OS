@@ -29,6 +29,14 @@ export function requiredDates(user, now = new Date()) {
 export function assertDateKey(value) {
   if (!/^\d{4}-\d{2}-\d{2}$/.test(value))
     throw new AppError("Invalid date", 400, "INVALID_DATE");
+  const [year, month, day] = value.split("-").map(Number);
+  const parsed = new Date(Date.UTC(year, month - 1, day, 12));
+  if (
+    parsed.getUTCFullYear() !== year ||
+    parsed.getUTCMonth() !== month - 1 ||
+    parsed.getUTCDate() !== day
+  )
+    throw new AppError("Invalid date", 400, "INVALID_DATE");
 }
 export function dateKeysBetween(startKey, endKey) {
   const result = [];
@@ -58,5 +66,14 @@ export function monthPeriod(dateKey) {
     periodKey: start.slice(0, 7),
     startDateKey: start,
     endDateKey: new Date(next.getTime() - 86400000).toISOString().slice(0, 10),
+  };
+}
+
+export function yearPeriod(dateKey) {
+  const year = dateKey.slice(0, 4);
+  return {
+    periodKey: year,
+    startDateKey: `${year}-01-01`,
+    endDateKey: `${year}-12-31`,
   };
 }

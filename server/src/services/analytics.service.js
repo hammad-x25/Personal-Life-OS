@@ -12,7 +12,7 @@ import DailyPerformance from '../models/DailyPerformance.js';
 import SpendingAccountability from '../models/SpendingAccountability.js';
 import HabitLog from '../models/HabitLog.js';
 import { isHabitScheduledDate } from '../utils/habit-schedule.js';
-import { dateKeyInTimezone, dateKeysBetween, shiftDateKey, weekPeriod, monthPeriod } from '../utils/dates.js';
+import { dateKeyInTimezone, dateKeysBetween, shiftDateKey, weekPeriod, monthPeriod, yearPeriod } from '../utils/dates.js';
 import { calculateDailyScore } from './score.service.js';
 
 export async function dashboardToday(user) {
@@ -60,9 +60,9 @@ export async function financeSummary(user, startDateKey, endDateKey) {
   return { totals, categories, trend, accountabilityDays: accountability, budgets: budgetRows, financialGoals, netBalance: incomeTotal - expenseTotal, averageDailySpending: trend.length ? expenseTotal / trend.length : 0, highestSpendingDay, highestSpendingCategory: categories[0] || null };
 }
 
-export async function dashboardPeriod(user, type) {
+export async function dashboardPeriod(user, type, customPeriod = null) {
   const dateKey = dateKeyInTimezone(new Date(), user.timezone);
-  const period = type === 'WEEKLY' ? weekPeriod(dateKey) : monthPeriod(dateKey);
+  const period = customPeriod || (type === 'WEEKLY' ? weekPeriod(dateKey) : type === 'MONTHLY' ? monthPeriod(dateKey) : yearPeriod(dateKey));
   const [performance, finance, tasks, goals, projects, habits, habitLogs, workouts, timetable, phones, projectTasks] = await Promise.all([
     DailyPerformance.find({ userId: user._id, dateKey: { $gte: period.startDateKey, $lte: period.endDateKey } }).sort({ dateKey: 1 }),
     financeSummary(user, period.startDateKey, period.endDateKey),

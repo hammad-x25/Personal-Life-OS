@@ -1,11 +1,13 @@
 import DailyPerformance from "../models/DailyPerformance.js";
 import WeeklyPerformance from "../models/WeeklyPerformance.js";
 import MonthlyPerformance from "../models/MonthlyPerformance.js";
+import YearlyPerformance from "../models/YearlyPerformance.js";
 import User from "../models/User.js";
 import {
   dateKeyInTimezone,
   dateKeysBetween,
   monthPeriod,
+  yearPeriod,
   shiftDateKey,
   weekPeriod,
 } from "../utils/dates.js";
@@ -53,7 +55,9 @@ export async function finalizePeriod(user, type, period) {
   if (type === "WEEKLY") payload.componentAverages = componentAverages;
   if (type === "MONTHLY")
     payload.summaryMetrics = { daysRecorded: daily.length, componentAverages };
-  const Model = type === "WEEKLY" ? WeeklyPerformance : MonthlyPerformance;
+  if (type === "YEARLY")
+    payload.summaryMetrics = { daysRecorded: daily.length, componentAverages };
+  const Model = type === "WEEKLY" ? WeeklyPerformance : type === "MONTHLY" ? MonthlyPerformance : YearlyPerformance;
   return Model.findOneAndUpdate(
     { userId: user._id, periodKey: period.periodKey },
     { $set: payload },
@@ -67,5 +71,6 @@ export async function finalizeAllUsers(date = new Date()) {
     const dateKey = dateKeyInTimezone(date, user.timezone);
     await finalizePeriod(user, "WEEKLY", weekPeriod(dateKey));
     await finalizePeriod(user, "MONTHLY", monthPeriod(dateKey));
+    await finalizePeriod(user, "YEARLY", yearPeriod(dateKey));
   }
 }

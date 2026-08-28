@@ -7,6 +7,12 @@
 .search-results a { display: block; padding: 9px; color: #d8e2ed; text-decoration: none; border-radius: 8px; }
 .search-results a:hover { background: #16212e; }
 .search-results small { color: #a4f17d; margin-right: 8px; }
+.route-loading { min-height: 320px; display: grid; place-items: center; color: #a4f17d; font: 500 .8rem 'DM Mono', monospace; letter-spacing: .08em; text-transform: uppercase; }
+.connection-banner { display: flex; align-items: center; justify-content: space-between; gap: 16px; margin: -34px 0 30px; padding: 12px 14px; border: 1px solid #75484b; border-radius: 12px; color: #ffd5d5; background: #29191d; }
+.connection-banner button { flex: 0 0 auto; padding: 8px 12px; }
+.history-controls { display: flex; align-items: end; gap: 16px; flex-wrap: wrap; margin: 16px 0 22px; }
+.history-controls label { display: grid; gap: 6px; color: #8493a5; font-size: .75rem; }
+.history-controls input { min-width: 150px; }
 .habit-stats { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; color: #8493a5; font-size: .75rem; }
 .habit-heatmap { display: flex; gap: 3px; }
 .habit-heatmap i { width: 9px; height: 9px; border-radius: 2px; background: #29384a; }
@@ -24,6 +30,7 @@ body[data-theme="light"] .shell, body[data-theme="light"] .center { background: 
 body[data-theme="light"] .card, body[data-theme="light"] .panel, body[data-theme="light"] .list-row, body[data-theme="light"] .search-results { background: #ffffff; border-color: #d9e1eb; }
 body[data-theme="light"] input, body[data-theme="light"] select { color: #17202b; background: #ffffff; border-color: #c7d2df; }
 body[data-theme="light"] aside { border-color: #d9e1eb; }
+body[data-theme="light"] .connection-banner { color: #7b2727; background: #fff0f0; border-color: #e6aaaa; }
 /* Habit plan controls */
 .weekday-picker { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
 .weekday-picker button { padding: 8px 10px; border-radius: 9px; }

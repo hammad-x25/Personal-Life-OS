@@ -1,20 +1,33 @@
 import DailyPerformance from '../models/DailyPerformance.js';
 import WeeklyPerformance from '../models/WeeklyPerformance.js';
 import MonthlyPerformance from '../models/MonthlyPerformance.js';
+import YearlyPerformance from '../models/YearlyPerformance.js';
 import TimelineEvent from '../models/TimelineEvent.js';
-import { dateKeyInTimezone, monthPeriod, weekPeriod, shiftDateKey } from '../utils/dates.js';
+import { assertDateKey, dateKeyInTimezone, dateKeysBetween, monthPeriod, weekPeriod, yearPeriod, shiftDateKey } from '../utils/dates.js';
 import { dashboardToday, dashboardPeriod, financeSummary, growth, correlations } from '../services/analytics.service.js';
 import { calculateDailyScore } from '../services/score.service.js';
-import { ok } from '../utils/api.js';
+import { AppError, ok } from '../utils/api.js';
 
 export const today = async (req, res) => ok(res, await dashboardToday(req.user));
 export const timeline = async (req, res) => ok(res, await TimelineEvent.find({ userId: req.user._id }).sort({ timestamp: -1 }).limit(Math.min(Number(req.query.limit) || 100, 250)));
 export const daily = async (req, res) => { const end = req.query.endDateKey || dateKeyInTimezone(new Date(), req.user.timezone); const start = req.query.startDateKey || shiftDateKey(end, -6); await calculateDailyScore(req.user, end); return ok(res, await DailyPerformance.find({ userId: req.user._id, dateKey: { $gte: start, $lte: end } }).sort({ dateKey: 1 })); };
 export const weekly = async (req, res) => ok(res, await WeeklyPerformance.find({ userId: req.user._id }).sort({ startDateKey: -1 }).limit(52));
 export const monthly = async (req, res) => ok(res, await MonthlyPerformance.find({ userId: req.user._id }).sort({ startDateKey: -1 }).limit(24));
+export const yearly = async (req, res) => ok(res, await YearlyPerformance.find({ userId: req.user._id }).sort({ startDateKey: -1 }).limit(10));
 export const growthData = async (req, res) => { const end = req.query.endDateKey || dateKeyInTimezone(new Date(), req.user.timezone); return ok(res, await growth(req.user, req.query.startDateKey || shiftDateKey(end, -29), end)); };
 export const finance = async (req, res) => { const end = req.query.endDateKey || dateKeyInTimezone(new Date(), req.user.timezone); return ok(res, await financeSummary(req.user, req.query.startDateKey || shiftDateKey(end, -29), end)); };
-export const currentPeriods = async (req, res) => { const dateKey = dateKeyInTimezone(new Date(), req.user.timezone); return ok(res, { week: weekPeriod(dateKey), month: monthPeriod(dateKey) }); };
+export const currentPeriods = async (req, res) => { const dateKey = dateKeyInTimezone(new Date(), req.user.timezone); return ok(res, { week: weekPeriod(dateKey), month: monthPeriod(dateKey), year: yearPeriod(dateKey) }); };
 export const weeklyDashboard = async (req, res) => ok(res, await dashboardPeriod(req.user, 'WEEKLY'));
 export const monthlyDashboard = async (req, res) => ok(res, await dashboardPeriod(req.user, 'MONTHLY'));
+export const yearlyDashboard = async (req, res) => ok(res, await dashboardPeriod(req.user, 'YEARLY'));
+export const historyDashboard = async (req, res) => {
+  const endDateKey = req.query.endDateKey || dateKeyInTimezone(new Date(), req.user.timezone);
+  const allTime = req.query.allTime === 'true';
+  const startDateKey = allTime ? req.user.registeredDateKey : (req.query.startDateKey || shiftDateKey(endDateKey, -29));
+  assertDateKey(startDateKey);
+  assertDateKey(endDateKey);
+  if (startDateKey > endDateKey) throw new AppError('Start date must be on or before end date', 400, 'INVALID_DATE_RANGE');
+  if (!allTime && dateKeysBetween(startDateKey, endDateKey).length > 731) throw new AppError('Historical ranges cannot exceed 731 days', 400, 'DATE_RANGE_TOO_LARGE');
+  return ok(res, await dashboardPeriod(req.user, 'HISTORICAL', { periodKey: `${startDateKey}:${endDateKey}`, startDateKey, endDateKey }));
+};
 export const correlationData = async (req, res) => { const end = req.query.endDateKey || dateKeyInTimezone(new Date(), req.user.timezone); return ok(res, await correlations(req.user, req.query.startDateKey || shiftDateKey(end, 29 * -1), end)); };

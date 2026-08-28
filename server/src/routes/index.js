@@ -163,9 +163,12 @@ router.get("/exercise/adherence", requireAccountability, asyncHandler(exercise.a
 router.get("/dashboard/today", requireAccountability, asyncHandler(analytics.today));
 router.get("/dashboard/weekly", requireAccountability, asyncHandler(analytics.weeklyDashboard));
 router.get("/dashboard/monthly", requireAccountability, asyncHandler(analytics.monthlyDashboard));
+router.get("/dashboard/yearly", requireAccountability, asyncHandler(analytics.yearlyDashboard));
+router.get("/analytics/history", requireAccountability, asyncHandler(analytics.historyDashboard));
 router.get("/analytics/daily", requireAccountability, asyncHandler(analytics.daily));
 router.get("/analytics/weekly", requireAccountability, asyncHandler(analytics.weekly));
 router.get("/analytics/monthly", requireAccountability, asyncHandler(analytics.monthly));
+router.get("/analytics/yearly", requireAccountability, asyncHandler(analytics.yearly));
 router.get("/analytics/growth", requireAccountability, asyncHandler(analytics.growthData));
 router.get("/analytics/finance", requireAccountability, asyncHandler(analytics.finance));
 router.get("/finance/transactions", requireAccountability, asyncHandler(finance.transactions));

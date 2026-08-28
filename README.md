@@ -16,11 +16,14 @@ A local-first MERN personal operating system for planning, recording, measuring,
 - Seed data for a demo account
 - Backend dashboard aggregation and deterministic daily score snapshots
 - Finance summaries, projects, project milestones, timeline events, and historical analytics APIs
+- Daily, weekly, monthly, and yearly performance snapshots with growth comparisons
+- Historical analytics explorer with preset, custom, and all-time date ranges
 - Server-side AI review service with local fallback and validated structured output
 - Search across tasks, goals, habits, projects, expenses, and timeline events
 - Rotating, revocable refresh-token sessions with MongoDB TTL cleanup
 - Configurable profile, timezone, currency, score weights, accountability, and theme settings
 - Scheduled reminders and 14-day analytics seed data
+- Retryable startup/accountability states and an in-app API/database outage banner
 
 ## Requirements
 
@@ -97,6 +100,10 @@ GET/POST/PATCH/DELETE /api/expenses
 GET/POST/PATCH/DELETE /api/tasks
 GET/POST/PATCH/DELETE /api/goals
 GET/POST/PATCH/DELETE /api/habits
+GET  /api/dashboard/yearly
+GET  /api/analytics/yearly
+GET  /api/analytics/history?startDateKey=2026-01-01&endDateKey=2026-03-31
+GET  /api/analytics/history?allTime=true
 ```
 
 ## Architecture direction
@@ -108,3 +115,5 @@ Business rules belong in backend services and middleware. Date-only concepts use
 - If the API cannot connect, start the MongoDB service and verify `MONGODB_URI`.
 - If the browser reports CORS errors, verify `CLIENT_URL` matches the Vite URL.
 - If the app is locked, use the accountability screen; direct API calls are intentionally subject to the same backend gate.
+
+When the API or local MongoDB becomes unavailable after login, the client shows a service-status banner instead of failing silently. Startup and accountability checks provide a `Try again` action. The banner is cleared automatically after a successful API response.

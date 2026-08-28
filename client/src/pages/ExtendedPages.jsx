@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import { useSelector } from "react-redux";
 import { api } from "../api.js";
 import {
   LineChart,
@@ -16,6 +17,11 @@ const today = () =>
   new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Karachi" }).format(
     new Date(),
   );
+const shiftDateKey = (dateKey, days) => {
+  const date = new Date(dateKey + "T12:00:00Z");
+  date.setUTCDate(date.getUTCDate() + days);
+  return date.toISOString().slice(0, 10);
+};
 const DEFAULT_FINANCE_CATEGORIES = ['Food', 'Transport', 'Education', 'Entertainment', 'Shopping', 'Bills', 'Health', 'Subscriptions', 'Family', 'Travel', 'Other'];
 function Header({ eyebrow = "MEASURE", title, description, children }) {
   return (
@@ -205,120 +211,6 @@ export function FinancePage() {
         ))}
         {!items.length && <p className="muted">No financial records yet.</p>}
       </section>
-    </div>
-  );
-}
-
-export function CommandDashboard() {
-  const [data, setData] = useState(null);
-  const [error, setError] = useState(null);
-  useEffect(() => {
-    api
-      .get("/dashboard/today")
-      .then((r) => setData(r.data.data))
-      .catch(setError);
-  }, []);
-  if (error)
-    return (
-      <div>
-        <Header
-          title="Today"
-          description="Your command center could not load."
-        />
-        <ErrorBox error={error} />
-      </div>
-    );
-  if (!data) return <div className="center">Loading today…</div>;
-  const score = data.score?.score ?? 0;
-  return (
-    <div>
-      <div className="hero">
-        <div>
-          <span className="eyebrow">TODAY'S COMMAND CENTER</span>
-          <h1>Make the day count.</h1>
-          <p className="muted">
-            A live view of the plan, the record, and the next useful action.
-          </p>
-        </div>
-        <a className="button" href="/app/tasks">
-          + Add a task
-        </a>
-      </div>
-      <div className="grid">
-        <div className="card">
-          <span className="eyebrow">PRODUCTIVITY</span>
-          <strong>{score}%</strong>
-          <p className="muted">Backend-calculated today</p>
-        </div>
-        <div className="card">
-          <span className="eyebrow">TASKS</span>
-          <strong>
-            {data.tasks.completed} / {data.tasks.total}
-          </strong>
-          <p className="muted">Completed today</p>
-        </div>
-        <div className="card">
-          <span className="eyebrow">SPENDING</span>
-          <strong>
-            Rs. {Number(data.finance.total || 0).toLocaleString()}
-          </strong>
-          <p className="muted">Recorded today</p>
-        </div>
-        <div className="card">
-          <span className="eyebrow">PHONE</span>
-          <strong>
-            {data.phoneUsage
-              ? `${Math.floor(data.phoneUsage.phoneUsageMinutes / 60)}h ${data.phoneUsage.phoneUsageMinutes % 60}m`
-              : "—"}
-          </strong>
-          <p className="muted">Daily check-in</p>
-        </div>
-      </div>
-      <div className="dashboard-columns">
-        <section className="panel">
-          <span className="eyebrow">TODAY'S PLAN</span>
-          {data.tasks.items.map((task) => (
-            <div className="mini-row" key={task._id}>
-              <span
-                className={`dot ${task.status === "COMPLETED" ? "green" : ""}`}
-              />
-              <span>{task.title}</span>
-              <small>{task.status.replace("_", " ")}</small>
-            </div>
-          ))}
-          {!data.tasks.items.length && (
-            <p className="muted">No tasks scheduled for today.</p>
-          )}
-        </section>
-        <section className="panel">
-          <span className="eyebrow">GOALS IN MOTION</span>
-          {data.goals.map((goal) => {
-            const pct = Math.min(
-              100,
-              Math.round(
-                ((goal.currentProgress || 0) / (goal.target || 1)) * 100,
-              ),
-            );
-            return (
-              <div className="goal-row" key={goal._id}>
-                <div>
-                  <strong>{goal.title}</strong>
-                  <small>
-                    {goal.currentProgress || 0} / {goal.target || 0}{" "}
-                    {goal.unit || ""}
-                  </small>
-                </div>
-                <div className="progress">
-                  <span style={{ width: `${pct}%` }} />
-                </div>
-              </div>
-            );
-          })}
-          {!data.goals.length && (
-            <p className="muted">Create a goal to see progress here.</p>
-          )}
-        </section>
-      </div>
     </div>
   );
 }
@@ -594,8 +486,37 @@ export function AnalyticsPage() {
   const [period, setPeriod] = useState(null);
   const [correlation, setCorrelation] = useState(null);
   const [range, setRange] = useState('WEEKLY');
+  const [historyStart, setHistoryStart] = useState(() => shiftDateKey(today(), -29));
+  const [historyEnd, setHistoryEnd] = useState(() => today());
+  const [allTime, setAllTime] = useState(false);
+  const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
-  useEffect(() => { Promise.all([api.get("/analytics/daily"), api.get("/analytics/growth"), api.get(`/dashboard/${range.toLowerCase()}`), api.get("/analytics/correlations")]).then(([d, g, p, c]) => { setDaily(d.data.data); setGrowth(p.data.data.growth || g.data.data); setPeriod(p.data.data); setCorrelation(c.data.data); }).catch(setError); }, [range]);
+  const user = useSelector((state) => state.auth.user);
+  const historyMode = range === 'HISTORY';
+  useEffect(() => {
+    const params = historyMode ? { startDateKey: historyStart, endDateKey: historyEnd, ...(allTime ? { allTime: 'true' } : {}) } : undefined;
+    setLoading(true);
+    setError(null);
+    const periodRequest = historyMode ? api.get('/analytics/history', { params }) : api.get('/dashboard/' + range.toLowerCase());
+    Promise.all([api.get("/analytics/daily", { params }), api.get("/analytics/growth", { params }), periodRequest, api.get("/analytics/correlations", { params })])
+      .then(([d, g, p, c]) => { setDaily(d.data.data); setGrowth(p.data.data.growth || g.data.data); setPeriod(p.data.data); setCorrelation(c.data.data); })
+      .catch(setError)
+      .finally(() => setLoading(false));
+  }, [range, historyStart, historyEnd, historyMode, allTime]);
+  function selectHistoryPreset(days) {
+    const end = today();
+    setAllTime(false);
+    setHistoryEnd(end);
+    setHistoryStart(shiftDateKey(end, -(days - 1)));
+    setRange('HISTORY');
+  }
+  function selectAllTime() {
+    const start = user?.registeredDateKey || historyStart;
+    setAllTime(true);
+    setHistoryStart(start);
+    setHistoryEnd(today());
+    setRange('HISTORY');
+  }
   return (
     <div>
       <Header
@@ -603,14 +524,16 @@ export function AnalyticsPage() {
         description="See what you planned, what happened, and how the trend is moving."
       />
       <ErrorBox error={error} />
-      <div className="actions"><button className={range === 'WEEKLY' ? '' : 'secondary'} onClick={() => setRange('WEEKLY')}>Weekly</button><button className={range === 'MONTHLY' ? '' : 'secondary'} onClick={() => setRange('MONTHLY')}>Monthly</button></div>
+      <div className="actions"><button className={range === 'WEEKLY' ? '' : 'secondary'} onClick={() => setRange('WEEKLY')}>Weekly</button><button className={range === 'MONTHLY' ? '' : 'secondary'} onClick={() => setRange('MONTHLY')}>Monthly</button><button className={range === 'YEARLY' ? '' : 'secondary'} onClick={() => setRange('YEARLY')}>Yearly</button><button className={historyMode ? '' : 'secondary'} onClick={() => setRange('HISTORY')}>History</button></div>
+      {historyMode && <div className="history-controls"><div className="actions"><button className="secondary" onClick={() => selectHistoryPreset(7)}>7 days</button><button className="secondary" onClick={() => selectHistoryPreset(30)}>30 days</button><button className="secondary" onClick={() => selectHistoryPreset(90)}>90 days</button><button className="secondary" onClick={() => selectHistoryPreset(365)}>1 year</button><button className="secondary" onClick={selectAllTime}>All time</button></div><label>From<input type="date" value={historyStart} max={historyEnd} onChange={e => { setAllTime(false); setHistoryStart(e.target.value); }} /></label><label>To<input type="date" value={historyEnd} min={historyStart} max={today()} onChange={e => { setAllTime(false); setHistoryEnd(e.target.value); }} /></label></div>}
+      {loading && <p className="muted">Refreshing analytics...</p>}
       <div className="grid">
         <div className="card">
           <span className="eyebrow">CURRENT AVERAGE</span>
           <strong>
             {growth?.currentScore ? `${Math.round(growth.currentScore)}%` : "—"}
           </strong>
-          <p className="muted">Selected period</p>
+          <p className="muted">{historyMode ? (allTime ? 'Since registration' : historyStart + " to " + historyEnd) : 'Selected period'}</p>
         </div>
         <div className="card">
           <span className="eyebrow">GROWTH</span>
@@ -621,7 +544,7 @@ export function AnalyticsPage() {
           </strong>
           <p className="muted">Compared with previous period</p>
         </div>
-        <div className="card"><span className="eyebrow">PERIOD SCORE</span><strong>{period?.score == null ? '—' : `${Math.round(period.score)}%`}</strong><p className="muted">{range.toLowerCase()} performance</p></div>
+        <div className="card"><span className="eyebrow">PERIOD SCORE</span><strong>{period?.score == null ? '—' : `${Math.round(period.score)}%`}</strong><p className="muted">{historyMode ? 'historical performance' : range.toLowerCase() + ' performance'}</p></div>
       </div>
       <section className="grid"><div className="card"><span className="eyebrow">TASKS</span><strong>{period?.metrics?.tasks?.completionRate == null ? "—" : `${Math.round(period.metrics.tasks.completionRate)}%`}</strong><p className="muted">{period?.metrics?.tasks?.completed || 0} of {period?.metrics?.tasks?.total || 0} completed</p></div><div className="card"><span className="eyebrow">HABITS</span><strong>{period?.metrics?.habits?.completionRate == null ? "—" : `${Math.round(period.metrics.habits.completionRate)}%`}</strong><p className="muted">Scheduled habit consistency</p></div><div className="card"><span className="eyebrow">EXERCISE</span><strong>{period?.metrics?.exercise?.workoutDays || 0}</strong><p className="muted">Workout days</p></div><div className="card"><span className="eyebrow">PHONE</span><strong>{period?.metrics?.phoneUsage?.averageMinutes == null ? "—" : `${Math.round(period.metrics.phoneUsage.averageMinutes)}m`}</strong><p className="muted">Average daily usage</p></div></section>
       <section className="panel">
