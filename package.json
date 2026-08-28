@@ -6,7 +6,14 @@
     "dev:server": "node --watch server/src/server.js",
     "dev:client": "npm.cmd --prefix client run dev",
     "install:all": "npm install && npm --prefix server install && npm --prefix client install",
-    "seed": "npm --prefix server run seed"
+    "seed": "npm --prefix server run seed",
+    "test": "npm.cmd --prefix server test",
+    "start:server": "npm.cmd --prefix server start"
   },
-  "devDependencies": { "concurrently": "^9.0.1" }
+  "devDependencies": {
+    "concurrently": "^9.0.1"
+  },
+  "dependencies": {
+    "prettier": "^3.9.6"
+  }
 }

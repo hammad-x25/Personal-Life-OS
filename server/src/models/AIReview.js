@@ -16,6 +16,7 @@ const schema = new mongoose.Schema({
   estimatedGrowth: Number,
   model: String,
   promptVersion: String,
+  validationStatus: { type: String, enum: ['VALIDATED', 'LOCAL_FALLBACK', 'INVALID_PROVIDER_RESPONSE'] },
   status: { type: String, enum: ['GENERATING', 'COMPLETED', 'FAILED'], default: 'GENERATING' },
   errorMessage: String,
   generatedAt: Date

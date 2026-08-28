@@ -1,5 +1,6 @@
 import { login, refresh, register, revokeRefreshToken } from '../services/auth.service.js'; import { ok } from '../utils/api.js';
-const cookie = { httpOnly: true, sameSite: 'lax', secure: false, path: '/' };
+import { env } from '../config/env.js';
+const cookie = { httpOnly: true, sameSite: env.isProduction ? 'strict' : 'lax', secure: env.cookieSecure, path: '/' };
 function send(res, result, message, status = 200) { res.cookie('accessToken', result.accessToken, { ...cookie, maxAge: 900000 }); res.cookie('refreshToken', result.refreshToken, { ...cookie, maxAge: 2592000000 }); return ok(res, { user: result.user }, message, status); }
 export const registerUser = async (req, res) => send(res, await register(req.body), 'Account created', 201);
 export const loginUser = async (req, res) => send(res, await login(req.body), 'Logged in');

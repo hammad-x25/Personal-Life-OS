@@ -15,6 +15,7 @@ const schema = new mongoose.Schema({
   actualEndTime: String,
   adherencePercentage: { type: Number, min: 0, max: 100 },
   recurrence: { type: { type: String, default: 'NONE' }, weekdays: [Number], endDateKey: String },
+  recurrenceRootId: { type: mongoose.Types.ObjectId, ref: 'TimetableEvent', default: null, index: true },
   deletedAt: Date
 }, { timestamps: true });
 

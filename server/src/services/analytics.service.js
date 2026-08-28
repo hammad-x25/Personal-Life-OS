@@ -10,8 +10,11 @@ import Budget from '../models/Budget.js';
 import FinancialGoal from '../models/FinancialGoal.js';
 import DailyPerformance from '../models/DailyPerformance.js';
 import SpendingAccountability from '../models/SpendingAccountability.js';
-import { dateKeyInTimezone, dateKeysBetween, shiftDateKey, weekPeriod, monthPeriod } from '../utils/dates.js';
+import HabitLog from '../models/HabitLog.js';
+import { isHabitScheduledDate } from '../utils/habit-schedule.js';
+import { dateKeyInTimezone, dateKeysBetween, shiftDateKey, weekPeriod, monthPeriod, yearPeriod } from '../utils/dates.js';
 import { calculateDailyScore } from './score.service.js';
+import { financialGoalWithProgress } from './finance-goal.service.js';
 
 export async function dashboardToday(user) {
   const dateKey = dateKeyInTimezone(new Date(), user.timezone);
@@ -49,24 +52,43 @@ export async function financeSummary(user, startDateKey, endDateKey) {
     Expense.aggregate([{ $match: { ...match, type: 'EXPENSE' } }, { $group: { _id: '$dateKey', total: { $sum: '$amount' } } }, { $sort: { _id: 1 } }]),
     SpendingAccountability.countDocuments({ userId: user._id, dateKey: { $gte: startDateKey, $lte: endDateKey }, status: 'ACCOUNTED' }),
     Budget.find({ userId: user._id, active: true, deletedAt: null }).select('name category amount currency periodType'),
-    FinancialGoal.find({ userId: user._id, status: { $in: ['ACTIVE', 'COMPLETED'] }, deletedAt: null }).select('title targetAmount currentAmount currency deadlineKey status')
+    FinancialGoal.find({ userId: user._id, status: { $in: ['ACTIVE', 'COMPLETED'] }, deletedAt: null }).select('title targetAmount currentAmount currency deadlineKey status contributions')
   ]);
-  const budgetRows = budgets.map(budget => { const spent = budget.category ? (categories.find(item => item._id === budget.category)?.total || 0) : (totals.find(item => item._id === 'EXPENSE')?.total || 0); return { ...budget.toObject(), spent, remaining: budget.amount - spent, usagePercentage: budget.amount ? spent / budget.amount * 100 : 0 }; });
-  return { totals, categories, trend, accountabilityDays: accountability, budgets: budgetRows, financialGoals };
+  const expenseTotal = totals.find(item => item._id === 'EXPENSE')?.total || 0;
+  const incomeTotal = totals.find(item => item._id === 'INCOME')?.total || 0;
+  const highestSpendingDay = trend.reduce((highest, item) => !highest || item.total > highest.total ? item : highest, null);
+  const budgetRows = budgets.map(budget => { const spent = budget.category ? (categories.find(item => item._id === budget.category)?.total || 0) : expenseTotal; return { ...budget.toObject(), spent, remaining: budget.amount - spent, usagePercentage: budget.amount ? spent / budget.amount * 100 : 0 }; });
+  const todayDateKey = dateKeyInTimezone(new Date(), user.timezone);
+  return { totals, categories, trend, accountabilityDays: accountability, budgets: budgetRows, financialGoals: financialGoals.map(goal => financialGoalWithProgress(goal, todayDateKey)), netBalance: incomeTotal - expenseTotal, averageDailySpending: trend.length ? expenseTotal / trend.length : 0, highestSpendingDay, highestSpendingCategory: categories[0] || null };
 }
 
-export async function dashboardPeriod(user, type) {
+export async function dashboardPeriod(user, type, customPeriod = null) {
   const dateKey = dateKeyInTimezone(new Date(), user.timezone);
-  const period = type === 'WEEKLY' ? weekPeriod(dateKey) : monthPeriod(dateKey);
-  const [performance, finance, tasks, goals, projects] = await Promise.all([
+  const period = customPeriod || (type === 'WEEKLY' ? weekPeriod(dateKey) : type === 'MONTHLY' ? monthPeriod(dateKey) : yearPeriod(dateKey));
+  const [performance, finance, tasks, goals, projects, habits, habitLogs, workouts, timetable, phones, projectTasks] = await Promise.all([
     DailyPerformance.find({ userId: user._id, dateKey: { $gte: period.startDateKey, $lte: period.endDateKey } }).sort({ dateKey: 1 }),
     financeSummary(user, period.startDateKey, period.endDateKey),
     Task.aggregate([{ $match: { userId: user._id, dueDateKey: { $gte: period.startDateKey, $lte: period.endDateKey }, deletedAt: null } }, { $group: { _id: '$status', count: { $sum: 1 } } }]),
     Goal.find({ userId: user._id, status: 'ACTIVE', deletedAt: null }).select('title currentProgress target unit'),
     Project.find({ userId: user._id, status: { $in: ['ACTIVE', 'COMPLETED'] }, deletedAt: null }).select('name status deadlineKey')
+    ,Habit.find({ userId: user._id, status: 'ACTIVE' }).select('_id planStartDateKey planEndDateKey frequencyType weekdays')
+    ,HabitLog.find({ userId: user._id, dateKey: { $gte: period.startDateKey, $lte: period.endDateKey } }).select('habitId dateKey completionPercentage')
+    ,ExerciseLog.find({ userId: user._id, dateKey: { $gte: period.startDateKey, $lte: period.endDateKey }, completed: true }).select('dateKey durationMinutes')
+    ,TimetableEvent.find({ userId: user._id, dateKey: { $gte: period.startDateKey, $lte: period.endDateKey }, deletedAt: null }).select('dateKey status adherencePercentage')
+    ,PhoneUsage.find({ userId: user._id, dateKey: { $gte: period.startDateKey, $lte: period.endDateKey } }).select('phoneUsageMinutes')
+    ,Task.aggregate([{ $match: { userId: user._id, projectId: { $ne: null }, deletedAt: null } }, { $group: { _id: '$projectId', total: { $sum: 1 }, completed: { $sum: { $cond: [{ $eq: ['$status', 'COMPLETED'] }, 1, 0] } } } }])
   ]);
   const score = performance.length ? performance.reduce((sum, item) => sum + item.score, 0) / performance.length : null;
-  return { type, period, score, performance, finance, tasks, goals, projects };
+  const taskTotal = tasks.reduce((sum, item) => sum + item.count, 0);
+  const taskCompleted = tasks.find(item => item._id === 'COMPLETED')?.count || 0;
+  const expectedHabitDates = dateKeysBetween(period.startDateKey, period.endDateKey).flatMap(dateKey => habits.filter(habit => (!habit.planStartDateKey || dateKey >= habit.planStartDateKey) && (!habit.planEndDateKey || dateKey <= habit.planEndDateKey) && isHabitScheduledDate(habit, dateKey)).map(habit => `${habit._id}:${dateKey}`));
+  const completedHabitDates = new Set(habitLogs.filter(item => item.completionPercentage >= 100).map(item => `${item.habitId}:${item.dateKey}`));
+  const adherenceValues = timetable.filter(item => item.adherencePercentage != null).map(item => item.adherencePercentage);
+  const average = values => values.length ? values.reduce((sum, value) => sum + value, 0) / values.length : null;
+  const projectTaskMap = new Map(projectTasks.map(item => [String(item._id), item]));
+  const projectMetrics = projects.map(project => { const taskMetric = projectTaskMap.get(String(project._id)); return { ...project.toObject(), progressPercentage: taskMetric?.total ? Math.round(taskMetric.completed / taskMetric.total * 100) : project.status === 'COMPLETED' ? 100 : 0, taskTotal: taskMetric?.total || 0, taskCompleted: taskMetric?.completed || 0 }; });
+  const periodGrowth = await growth(user, period.startDateKey, period.endDateKey);
+  return { type, period, score, performance, growth: periodGrowth, finance, tasks, goals, projects: projectMetrics, metrics: { tasks: { total: taskTotal, completed: taskCompleted, completionRate: taskTotal ? taskCompleted / taskTotal * 100 : null }, habits: { expected: expectedHabitDates.length, completed: completedHabitDates.size, completionRate: expectedHabitDates.length ? completedHabitDates.size / expectedHabitDates.length * 100 : null }, exercise: { workoutDays: new Set(workouts.map(item => item.dateKey)).size, totalDurationMinutes: workouts.reduce((sum, item) => sum + (item.durationMinutes || 0), 0) }, timetable: { planned: timetable.length, completed: timetable.filter(item => item.status === 'COMPLETED').length, adherencePercentage: average(adherenceValues) }, phoneUsage: { averageMinutes: average(phones.map(item => item.phoneUsageMinutes)) }, projects: projectMetrics } };
 }
 
 export async function correlations(user, startDateKey, endDateKey) {

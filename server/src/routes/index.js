@@ -1,4 +1,5 @@
 import { Router } from "express";
+import rateLimit from "express-rate-limit";
 import { asyncHandler } from "../utils/api.js";
 import { authenticate } from "../middleware/auth.js";
 import { requireAccountability } from "../middleware/accountability.js";
@@ -23,6 +24,8 @@ import {
   financialGoalSchema,
   contributionSchema,
   timetableCompletionSchema,
+  goalMilestoneSchema,
+  financeCategorySchema,
 } from "../validators/schemas.js";
 import * as auth from "../controllers/auth.controller.js";
 import * as access from "../controllers/access.controller.js";
@@ -39,7 +42,9 @@ import * as finance from "../controllers/finance.controller.js";
 import * as quickAdd from "../controllers/quick-add.controller.js";
 import * as recurrence from "../controllers/recurrence.controller.js";
 import * as timetable from "../controllers/timetable.controller.js";
+import * as goal from "../controllers/goal.controller.js";
 const router = Router();
+const aiRateLimit = rateLimit({ windowMs: 15 * 60 * 1000, limit: 12, standardHeaders: true, legacyHeaders: false, message: { success: false, code: 'AI_RATE_LIMITED', message: 'Too many AI review requests. Try again later.', data: null } });
 router.post(
   "/auth/register",
   validate(registerSchema),
@@ -53,6 +58,7 @@ router.get("/auth/me", asyncHandler(auth.me));
 router.patch("/auth/profile", validate(settingsSchema), asyncHandler(settings.updateProfile));
 router.post("/quick-add", requireAccountability, asyncHandler(quickAdd.quickAdd));
 router.post("/tasks/sync-recurring", requireAccountability, asyncHandler(recurrence.syncTasks));
+router.post("/timetable/sync-recurring", requireAccountability, asyncHandler(timetable.syncRecurring));
 router.post("/timetable/:id/complete", requireAccountability, validate(timetableCompletionSchema), asyncHandler(timetable.complete));
 router.get("/analytics/timetable-adherence", requireAccountability, asyncHandler(timetable.adherence));
 router.get("/access/status", asyncHandler(access.accessStatus));
@@ -63,6 +69,7 @@ router.post(
 );
 router.get("/check-ins/history", asyncHandler(access.phoneHistory));
 router.get("/spending-accountability/history", asyncHandler(access.spendingHistory));
+router.get("/spending-accountability/summary", asyncHandler(access.spendingSummary));
 router.get(
   "/spending-accountability/:dateKey/preview",
   asyncHandler(access.spendingPreview),
@@ -113,8 +120,11 @@ for (const [path, key] of [
     asyncHandler(crud.remove(key)),
   );
 }
+router.post("/goals/:id/milestones", requireAccountability, validate(goalMilestoneSchema), asyncHandler(goal.addMilestone));
+router.patch("/goals/:id/milestones/:milestoneId", requireAccountability, validate(goalMilestoneSchema.partial()), asyncHandler(goal.updateMilestone));
 router.get("/habits/heatmap", requireAccountability, asyncHandler(habit.heatmap));
 router.post("/habits/:id/log", requireAccountability, validate(habitLogSchema), asyncHandler(habit.log));
+router.get("/habits/instances", requireAccountability, asyncHandler(habit.instances));
 router.get("/habits/:id/history", requireAccountability, asyncHandler(habit.history));
 router.get("/habits/:id/stats", requireAccountability, asyncHandler(habit.stats));
 router.get(
@@ -150,14 +160,22 @@ router.post(
   validate(exerciseLogSchema),
   asyncHandler(exercise.createLog),
 );
+router.get("/exercise/adherence", requireAccountability, asyncHandler(exercise.adherence));
 router.get("/dashboard/today", requireAccountability, asyncHandler(analytics.today));
 router.get("/dashboard/weekly", requireAccountability, asyncHandler(analytics.weeklyDashboard));
 router.get("/dashboard/monthly", requireAccountability, asyncHandler(analytics.monthlyDashboard));
+router.get("/dashboard/yearly", requireAccountability, asyncHandler(analytics.yearlyDashboard));
+router.get("/analytics/history", requireAccountability, asyncHandler(analytics.historyDashboard));
 router.get("/analytics/daily", requireAccountability, asyncHandler(analytics.daily));
 router.get("/analytics/weekly", requireAccountability, asyncHandler(analytics.weekly));
 router.get("/analytics/monthly", requireAccountability, asyncHandler(analytics.monthly));
+router.get("/analytics/yearly", requireAccountability, asyncHandler(analytics.yearly));
 router.get("/analytics/growth", requireAccountability, asyncHandler(analytics.growthData));
 router.get("/analytics/finance", requireAccountability, asyncHandler(analytics.finance));
+router.get("/finance/transactions", requireAccountability, asyncHandler(finance.transactions));
+router.get("/finance/categories", requireAccountability, asyncHandler(finance.listCategories));
+router.post("/finance/categories", requireAccountability, validate(financeCategorySchema), asyncHandler(finance.createCategory));
+router.delete("/finance/categories/:id", requireAccountability, asyncHandler(finance.deleteCategory));
 router.get("/analytics/periods", requireAccountability, asyncHandler(analytics.currentPeriods));
 router.get("/analytics/correlations", requireAccountability, asyncHandler(analytics.correlationData));
 router.get("/budgets", requireAccountability, asyncHandler(finance.listBudgets));
@@ -175,15 +193,17 @@ router.get("/notifications", requireAccountability, asyncHandler(notification.li
 router.get("/notifications/unread-count", requireAccountability, asyncHandler(notification.unreadCount));
 router.patch("/notifications/:id/read", requireAccountability, asyncHandler(notification.markRead));
 router.patch("/notifications/:id/dismiss", requireAccountability, asyncHandler(notification.dismiss));
+router.patch("/notifications/read-all", requireAccountability, asyncHandler(notification.markAllRead));
 router.get("/projects", requireAccountability, asyncHandler(project.list));
 router.post("/projects", requireAccountability, validate(projectSchema), asyncHandler(project.create));
 router.patch("/projects/:id", requireAccountability, validate(projectSchema.partial()), asyncHandler(project.update));
 router.delete("/projects/:id", requireAccountability, asyncHandler(project.remove));
 router.get("/projects/:id/milestones", requireAccountability, asyncHandler(project.milestones));
 router.post("/projects/:id/milestones", requireAccountability, validate(milestoneSchema), asyncHandler(project.createMilestone));
+router.patch("/projects/:id/milestones/:milestoneId", requireAccountability, validate(milestoneSchema.partial()), asyncHandler(project.updateMilestone));
 router.get("/projects/:id/timeline", requireAccountability, asyncHandler(project.projectTimeline));
 router.get("/ai/reviews", requireAccountability, asyncHandler(review.list));
-router.post("/ai/daily-review", requireAccountability, asyncHandler(review.generate('DAILY')));
-router.post("/ai/weekly-review", requireAccountability, asyncHandler(review.generate('WEEKLY')));
-router.post("/ai/monthly-review", requireAccountability, asyncHandler(review.generate('MONTHLY')));
+router.post("/ai/daily-review", aiRateLimit, requireAccountability, asyncHandler(review.generate('DAILY')));
+router.post("/ai/weekly-review", aiRateLimit, requireAccountability, asyncHandler(review.generate('WEEKLY')));
+router.post("/ai/monthly-review", aiRateLimit, requireAccountability, asyncHandler(review.generate('MONTHLY')));
 export default router;

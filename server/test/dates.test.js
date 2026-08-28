@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { dateKeyInTimezone, requiredDates, shiftDateKey, weekPeriod, monthPeriod } from '../src/utils/dates.js';
+import { assertDateKey, dateKeyInTimezone, requiredDates, shiftDateKey, weekPeriod, monthPeriod, yearPeriod } from '../src/utils/dates.js';
 
 test('date keys use the requested timezone', () => {
   const instant = new Date('2026-08-17T20:30:00.000Z');
@@ -15,4 +15,10 @@ test('period helpers are stable date-key calculations', () => {
   assert.equal(shiftDateKey('2026-08-17', 1), '2026-08-18');
   assert.equal(weekPeriod('2026-08-19').startDateKey, '2026-08-17');
   assert.equal(monthPeriod('2026-08-19').endDateKey, '2026-08-31');
+  assert.deepEqual(yearPeriod('2026-08-19'), { periodKey: '2026', startDateKey: '2026-01-01', endDateKey: '2026-12-31' });
+});
+
+test('date validation rejects impossible calendar dates', () => {
+  assert.doesNotThrow(() => assertDateKey('2026-02-28'));
+  assert.throws(() => assertDateKey('2026-02-31'), { code: 'INVALID_DATE' });
 });

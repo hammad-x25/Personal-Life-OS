@@ -1,23 +1,54 @@
-import { useEffect, useState } from "react";
-import { Routes, Route, Navigate, Link, useNavigate } from "react-router-dom";
+import { lazy, Suspense, useEffect, useState } from "react";
+import { Routes, Route, Navigate, Link, useLocation, useNavigate } from "react-router-dom";
 import { useDispatch, useSelector } from "react-redux";
 import { api } from "./api.js";
 import { setAccess, setUser, clearUser } from "./store.js";
-import {
-  Dashboard,
-  TasksPage,
-  GoalsPage,
-  HabitsPage,
-  TimetablePage,
-  PlaceholderPage,
-} from "./pages/CorePages.jsx";
-import { ExercisePage, PhoneUsagePage } from "./pages/Phase3Pages.jsx";
-import { CommandDashboard, FinancePage, ProjectsPage, WorkPage, AnalyticsPage, TimelinePage, ReviewsPage, SettingsPage, AccountabilityHistoryPage, NotificationsPage } from "./pages/ExtendedPages.jsx";
+
+const lazyNamed = (loader, exportName) =>
+  lazy(() => loader().then((module) => ({ default: module[exportName] })));
+
+const Dashboard = lazyNamed(() => import("./pages/CorePages.jsx"), "Dashboard");
+const TasksPage = lazyNamed(() => import("./pages/CorePages.jsx"), "TasksPage");
+const GoalsPage = lazyNamed(() => import("./pages/CorePages.jsx"), "GoalsPage");
+const HabitsPage = lazyNamed(() => import("./pages/CorePages.jsx"), "HabitsPage");
+const TimetablePage = lazyNamed(() => import("./pages/CorePages.jsx"), "TimetablePage");
+const ExercisePage = lazyNamed(() => import("./pages/Phase3Pages.jsx"), "ExercisePage");
+const PhoneUsagePage = lazyNamed(() => import("./pages/Phase3Pages.jsx"), "PhoneUsagePage");
+const CommandDashboard = lazyNamed(() => import("./pages/CommandDashboard.jsx"), "CommandDashboard");
+const FinancePage = lazyNamed(() => import("./pages/ExtendedPages.jsx"), "FinancePage");
+const ProjectsPage = lazyNamed(() => import("./pages/ExtendedPages.jsx"), "ProjectsPage");
+const WorkPage = lazyNamed(() => import("./pages/ExtendedPages.jsx"), "WorkPage");
+const AnalyticsPage = lazyNamed(() => import("./pages/ExtendedPages.jsx"), "AnalyticsPage");
+const TimelinePage = lazyNamed(() => import("./pages/ExtendedPages.jsx"), "TimelinePage");
+const ReviewsPage = lazyNamed(() => import("./pages/ExtendedPages.jsx"), "ReviewsPage");
+const SettingsPage = lazyNamed(() => import("./pages/ExtendedPages.jsx"), "SettingsPage");
+const AccountabilityHistoryPage = lazyNamed(() => import("./pages/ExtendedPages.jsx"), "AccountabilityHistoryPage");
+const NotificationsPage = lazyNamed(() => import("./pages/ExtendedPages.jsx"), "NotificationsPage");
 
 const today = () =>
   new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Karachi" }).format(
     new Date(),
   );
+
+function RouteLoading() {
+  return <div className="route-loading" role="status">Loading module…</div>;
+}
+
+function ConnectionScreen({ error, onRetry }) {
+  return (
+    <main className="auth">
+      <div className="auth-card connection-card">
+        <span className="eyebrow">SERVICE STATUS</span>
+        <h1>Life OS is unavailable.</h1>
+        <p className="muted">
+          The API or local MongoDB could not be reached. Start the backend and MongoDB, then try again.
+        </p>
+        {error && <p className="error">{error.response?.data?.message || error.message}</p>}
+        <button onClick={onRetry}>Try again</button>
+      </div>
+    </main>
+  );
+}
 
 function Auth({ mode }) {
   const [form, setForm] = useState({ name: "", email: "", password: "" });
@@ -88,13 +119,20 @@ function Gate({ children }) {
   const dispatch = useDispatch();
   const status = useSelector((s) => s.access.status);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
+  const [retryToken, setRetryToken] = useState(0);
   useEffect(() => {
+    let active = true;
+    setLoading(true);
+    setError(null);
     api
       .get("/access/status")
       .then((r) => dispatch(setAccess(r.data.data)))
-      .catch(() => {})
-      .finally(() => setLoading(false));
-  }, [dispatch]);
+      .catch((e) => { if (active) setError(e); })
+      .finally(() => { if (active) setLoading(false); });
+    return () => { active = false; };
+  }, [dispatch, retryToken]);
+  if (error) return <ConnectionScreen error={error} onRetry={() => setRetryToken((value) => value + 1)} />;
   if (loading || !status)
     return <div className="center">Checking today’s accountability…</div>;
   if (!status.unlocked) return <Accountability status={status} />;
@@ -130,6 +168,11 @@ function Accountability({ status }) {
       setError(e.response?.data?.message || "Could not save phone usage");
     }
   }
+  const phoneNeeded = status.requirements.phoneUsage.requiredDates.includes(dateKey);
+  const spendingNeeded = status.requirements.spending.requiredDates.includes(dateKey);
+  useEffect(() => {
+    if (dateKey && spendingNeeded) api.get(`/spending-accountability/${dateKey}/preview`).then(r => setPreview(r.data.data)).catch(() => setPreview(null));
+  }, [dateKey, spendingNeeded]);
   async function spending(path) {
     try {
       await api.post(`/spending-accountability/${dateKey}/${path}`);
@@ -139,13 +182,6 @@ function Accountability({ status }) {
     }
   }
   if (!dateKey) return <div className="center">Loading requirements…</div>;
-  const phoneNeeded =
-    status.requirements.phoneUsage.requiredDates.includes(dateKey);
-  const spendingNeeded =
-    status.requirements.spending.requiredDates.includes(dateKey);
-  useEffect(() => {
-    if (dateKey && spendingNeeded) api.get(`/spending-accountability/${dateKey}/preview`).then(r => setPreview(r.data.data)).catch(() => setPreview(null));
-  }, [dateKey, spendingNeeded]);
   async function addMissingExpense() {
     try {
       await api.post(`/spending-accountability/${dateKey}/add-expense`, { ...missingExpense, amount: Number(missingExpense.amount) });
@@ -236,7 +272,7 @@ function QuickAdd({ onClose, onSaved }) {
   async function submit(e) {
     e.preventDefault(); setError('');
     const payload = type === 'expense' ? { amount: Number(form.amount), category: form.category, description: form.description, dateKey: form.dateKey } : type === 'goal' ? { title: form.title, target: Number(form.target), currentProgress: 0, unit: form.unit } : type === 'habit' ? { title: form.title, dailyTarget: Number(form.dailyTarget), targetUnit: form.targetUnit, planStartDateKey: form.dateKey } : type === 'workout' ? { dateKey: form.dateKey, workoutType: form.workoutType, completed: true } : type === 'phoneUsage' ? { dateKey: form.dateKey, phoneUsageMinutes: Number(form.phoneUsageMinutes) } : { title: form.title, dueDateKey: form.dateKey };
-    try { await api.post('/quick-add', { type, payload }); onSaved?.(); onClose(); } catch (e) { setError(e.response?.data?.message || 'Could not add item'); }
+    try { await api.post('/quick-add', { type, payload }); onSaved?.(type); onClose(); } catch (e) { setError(e.response?.data?.message || 'Could not add item'); }
   }
   return <div className="modal-backdrop" onMouseDown={onClose}><div className="quick-add modal" onMouseDown={e => e.stopPropagation()}><div className="row-between"><div><span className="eyebrow">COMMAND CENTER</span><h2>Quick add</h2></div><button className="icon-button" onClick={onClose}>Close</button></div><select value={type} onChange={e => setType(e.target.value)}><option value="task">Task</option><option value="expense">Expense</option><option value="goal">Goal</option><option value="habit">Habit</option><option value="workout">Workout</option><option value="phoneUsage">Phone usage</option></select><form onSubmit={submit}>{type === 'task' && <><input required placeholder="Task title" value={form.title} onChange={e => update('title', e.target.value)} /><input type="date" value={form.dateKey} onChange={e => update('dateKey', e.target.value)} /></>}{type === 'expense' && <><input required type="number" min="0.01" placeholder="Amount" value={form.amount} onChange={e => update('amount', e.target.value)} /><input required placeholder="Category" value={form.category} onChange={e => update('category', e.target.value)} /><input placeholder="Description" value={form.description} onChange={e => update('description', e.target.value)} /><input type="date" value={form.dateKey} onChange={e => update('dateKey', e.target.value)} /></>}{type === 'goal' && <><input required placeholder="Goal title" value={form.title} onChange={e => update('title', e.target.value)} /><input required type="number" min="0.01" placeholder="Target" value={form.target} onChange={e => update('target', e.target.value)} /><input placeholder="Unit" value={form.unit} onChange={e => update('unit', e.target.value)} /></>}{type === 'habit' && <><input required placeholder="Habit title" value={form.title} onChange={e => update('title', e.target.value)} /><input type="number" min="0" placeholder="Daily target" value={form.dailyTarget} onChange={e => update('dailyTarget', e.target.value)} /><input placeholder="Unit" value={form.targetUnit} onChange={e => update('targetUnit', e.target.value)} /></>}{type === 'workout' && <><input required placeholder="Workout type" value={form.workoutType} onChange={e => update('workoutType', e.target.value)} /><input type="date" value={form.dateKey} onChange={e => update('dateKey', e.target.value)} /></>}{type === 'phoneUsage' && <><input required type="number" min="0" placeholder="Minutes" value={form.phoneUsageMinutes} onChange={e => update('phoneUsageMinutes', e.target.value)} /><input type="date" value={form.dateKey} onChange={e => update('dateKey', e.target.value)} /></>}<button>Add to Life OS</button></form>{error && <p className="error">{error}</p>}</div></div>;
 }
@@ -248,8 +284,22 @@ function Shell() {
   const [search, setSearch] = useState("");
   const [results, setResults] = useState([]);
   const [quickAddOpen, setQuickAddOpen] = useState(false);
+  const [unreadNotifications, setUnreadNotifications] = useState(0);
+  const [connectionIssue, setConnectionIssue] = useState("");
+  const quickAddPaths = { task: '/app/tasks', expense: '/app/finance', goal: '/app/goals', habit: '/app/habits', workout: '/app/exercise', phoneUsage: '/app/phone-usage' };
   useEffect(() => { const theme = user?.settings?.theme || 'dark'; document.body.dataset.theme = theme; return () => { delete document.body.dataset.theme; }; }, [user]);
-  async function runSearch(value) { setSearch(value); if (value.trim().length < 2) return setResults([]); try { setResults((await api.get(`/search?q=${encodeURIComponent(value)}`)).data.data); } catch { setResults([]); } }
+  useEffect(() => {
+    const handleConnection = (event) => {
+      setConnectionIssue(event.detail?.online ? "" : event.detail?.message || "Service unavailable.");
+    };
+    window.addEventListener("lifeos:connection", handleConnection);
+    return () => window.removeEventListener("lifeos:connection", handleConnection);
+  }, []);
+  useEffect(() => { let active = true; const loadUnread = () => api.get('/notifications/unread-count').then(response => { if (active) setUnreadNotifications(response.data.data.count); }).catch(() => {}); loadUnread(); const timer = setInterval(loadUnread, 60000); return () => { active = false; clearInterval(timer); }; }, []);
+  function runSearch(value) { setSearch(value); }
+  useEffect(() => { let active = true; if (search.trim().length < 2) { setResults([]); return () => { active = false; }; } const timer = setTimeout(() => api.get(`/search?q=${encodeURIComponent(search.trim())}`).then(response => { if (active) setResults(response.data.data); }).catch(() => { if (active) setResults([]); }), 250); return () => { active = false; clearTimeout(timer); }; }, [search]);
+  const searchPath = item => ({ TASK: '/app/tasks', GOAL: '/app/goals', HABIT: '/app/habits', PROJECT: '/app/projects', EXPENSE: '/app/finance', TIMELINE: '/app/timeline' }[item.type] || '/app');
+  const location = useLocation();
   async function logout() {
     await api.post("/auth/logout");
     dispatch(clearUser());
@@ -278,7 +328,7 @@ function Shell() {
           <Link to="/app/reviews">AI reviews</Link>
           <Link to="/app/settings">Settings</Link>
           <Link to="/app/accountability-history">Spending history</Link>
-          <Link to="/app/notifications">Notifications</Link>
+          <Link to="/app/notifications">Notifications {unreadNotifications > 0 && <span className="notification-badge">{unreadNotifications > 99 ? '99+' : unreadNotifications}</span>}</Link>
         </nav>
         <button className="logout" onClick={logout}>
           Log out
@@ -290,31 +340,34 @@ function Shell() {
             <span className="eyebrow">{today()}</span>
             <h2>Good morning, {user?.name?.split(" ")[0] || "friend"}.</h2>
           </div>
-          <div className="search-box"><input placeholder="Search Life OS" value={search} onChange={e => runSearch(e.target.value)} />{results.length > 0 && <div className="search-results">{results.map(item => <div key={`${item.type}-${item.id}`}><small>{item.type}</small> {item.title}</div>)}</div>}</div>
+          <div className="search-box"><input placeholder="Search Life OS" value={search} onChange={e => runSearch(e.target.value)} />{results.length > 0 && <div className="search-results">{results.map(item => <Link to={searchPath(item)} key={`${item.type}-${item.id}`} onClick={() => { setSearch(''); setResults([]); }}><small>{item.type}</small> {item.title}</Link>)}</div>}</div>
           <button className="quick-add-trigger" onClick={() => setQuickAddOpen(true)}>+ Quick add</button>
           <div className="avatar">{user?.name?.[0] || "U"}</div>
         </header>
-        <Routes>
-          <Route index element={<CommandDashboard />} />
-          <Route path="tasks" element={<TasksPage />} />
-          <Route path="goals" element={<GoalsPage />} />
-          <Route path="habits" element={<HabitsPage />} />
-          <Route path="timetable" element={<TimetablePage />} />
-          <Route path="exercise" element={<ExercisePage />} />
-          <Route path="phone-usage" element={<PhoneUsagePage />} />
-          <Route path="finance" element={<FinancePage />} />
-          <Route path="projects" element={<ProjectsPage />} />
-          <Route path="work" element={<WorkPage />} />
-          <Route path="analytics" element={<AnalyticsPage />} />
-          <Route path="timeline" element={<TimelinePage />} />
-          <Route path="reviews" element={<ReviewsPage />} />
-          <Route path="settings" element={<SettingsPage />} />
-          <Route path="accountability-history" element={<AccountabilityHistoryPage />} />
-          <Route path="notifications" element={<NotificationsPage />} />
-          <Route path="*" element={<Dashboard />} />
-        </Routes>
+        {connectionIssue && <div className="connection-banner" role="alert"><span>{connectionIssue}</span><button className="secondary" onClick={() => setConnectionIssue("")}>Dismiss</button></div>}
+        <Suspense fallback={<RouteLoading />}>
+          <Routes location={location} key={location.key}>
+            <Route index element={<CommandDashboard />} />
+            <Route path="tasks" element={<TasksPage />} />
+            <Route path="goals" element={<GoalsPage />} />
+            <Route path="habits" element={<HabitsPage />} />
+            <Route path="timetable" element={<TimetablePage />} />
+            <Route path="exercise" element={<ExercisePage />} />
+            <Route path="phone-usage" element={<PhoneUsagePage />} />
+            <Route path="finance" element={<FinancePage />} />
+            <Route path="projects" element={<ProjectsPage />} />
+            <Route path="work" element={<WorkPage />} />
+            <Route path="analytics" element={<AnalyticsPage />} />
+            <Route path="timeline" element={<TimelinePage />} />
+            <Route path="reviews" element={<ReviewsPage />} />
+            <Route path="settings" element={<SettingsPage />} />
+            <Route path="accountability-history" element={<AccountabilityHistoryPage />} />
+            <Route path="notifications" element={<NotificationsPage />} />
+            <Route path="*" element={<Dashboard />} />
+          </Routes>
+        </Suspense>
       </section>
-      {quickAddOpen && <QuickAdd onClose={() => setQuickAddOpen(false)} onSaved={() => window.location.reload()} />}
+      {quickAddOpen && <QuickAdd onClose={() => setQuickAddOpen(false)} onSaved={(type) => nav(`${quickAddPaths[type] || '/app'}?quickAdd=${Date.now()}`, { replace: true })} />}
     </div>
   );
 }
@@ -331,14 +384,23 @@ function Protected() {
 export default function App() {
   const dispatch = useDispatch();
   const [checking, setChecking] = useState(true);
+  const [startupError, setStartupError] = useState(null);
+  const [retryToken, setRetryToken] = useState(0);
   useEffect(() => {
+    let active = true;
+    setChecking(true);
+    setStartupError(null);
     api
       .get("/auth/me")
       .then((r) => dispatch(setUser(r.data.data)))
-      .catch(() => {})
-      .finally(() => setChecking(false));
-  }, [dispatch]);
+      .catch((e) => {
+        if (active && e.response?.status !== 401) setStartupError(e);
+      })
+      .finally(() => { if (active) setChecking(false); });
+    return () => { active = false; };
+  }, [dispatch, retryToken]);
   if (checking) return <div className="center">Loading Life OS…</div>;
+  if (startupError) return <ConnectionScreen error={startupError} onRetry={() => setRetryToken((value) => value + 1)} />;
   return (
     <Routes>
       <Route path="/login" element={<Auth mode="login" />} />
