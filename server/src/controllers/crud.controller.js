@@ -8,13 +8,37 @@ import { ok, AppError } from "../utils/api.js";
 import { createTimelineEvent } from '../services/timeline.service.js';
 import { dateKeyInTimezone } from '../utils/dates.js';
 const models = { expenses: Expense, tasks: Task, goals: Goal, habits: Habit, timetable: TimetableEvent };
-export const list = (key) => async (req, res) =>
-  ok(
-    res,
-    await models[key]
-      .find({ userId: req.user._id, deletedAt: null })
-      .sort({ createdAt: -1 }),
-  );
+export function taskFilterForView(view = "ALL", today, status) {
+  const normalizedView = String(view).toUpperCase();
+  const validViews = ["ALL", "OVERDUE", "TODAY", "UPCOMING", "COMPLETED"];
+  if (!validViews.includes(normalizedView)) throw new AppError("Invalid task view", 400, "INVALID_FILTER");
+  const filter = {};
+  if (normalizedView === "OVERDUE") filter.dueDateKey = { $lt: today };
+  if (normalizedView === "TODAY") filter.dueDateKey = today;
+  if (normalizedView === "UPCOMING") filter.dueDateKey = { $gt: today };
+  if (normalizedView === "COMPLETED") filter.status = "COMPLETED";
+  if (["OVERDUE", "TODAY", "UPCOMING"].includes(normalizedView)) filter.status = { $nin: ["COMPLETED", "CANCELLED"] };
+  if (status !== undefined) {
+    const statuses = ["TODO", "IN_PROGRESS", "COMPLETED", "CANCELLED", "DEFERRED"];
+    const normalizedStatus = String(status).toUpperCase();
+    if (!statuses.includes(normalizedStatus)) throw new AppError("Invalid task status filter", 400, "INVALID_FILTER");
+    filter.status = normalizedStatus;
+  }
+  return filter;
+}
+export const list = (key) => async (req, res) => {
+  const filter = { userId: req.user._id, deletedAt: null };
+  let sort = { createdAt: -1 };
+  if (key === "tasks") {
+    const today = dateKeyInTimezone(new Date(), req.user.timezone);
+    Object.assign(filter, taskFilterForView(req.query.view, today, req.query.status));
+    sort = { dueDateKey: 1, priority: -1, createdAt: -1 };
+  }
+  const limit = key === "tasks" ? Math.min(200, Math.max(1, Number(req.query.limit) || 100)) : null;
+  let query = models[key].find(filter).sort(sort);
+  if (limit) query = query.limit(limit);
+  return ok(res, await query);
+};
 export const create = (key) => async (req, res) => {
   if (key === "tasks" && req.body.projectId) {
     const project = await Project.findOne({ _id: req.body.projectId, userId: req.user._id, deletedAt: null }).select("_id");

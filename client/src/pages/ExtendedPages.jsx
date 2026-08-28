@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
-import { useSelector } from "react-redux";
+import { useDispatch, useSelector } from "react-redux";
 import { api } from "../api.js";
+import { setUser as setAuthUser } from "../store.js";
 import {
   LineChart,
   Line,
@@ -87,6 +88,7 @@ export function FinancePage() {
   const [error, setError] = useState(null);
   const [budgetForm, setBudgetForm] = useState({ name: "Monthly spending", category: "", amount: "" });
   const [goalForm, setGoalForm] = useState({ title: "", targetAmount: "", deadlineKey: "" });
+  const [contributionForms, setContributionForms] = useState({});
   const [categoryForm, setCategoryForm] = useState({ name: "", type: "EXPENSE" });
   const [filters, setFilters] = useState({ startDateKey: `${today().slice(0, 7)}-01`, endDateKey: today(), type: "" });
   async function load() {
@@ -120,6 +122,7 @@ export function FinancePage() {
   async function createCategory(e) { e.preventDefault(); try { const response = await api.post('/finance/categories', categoryForm); setCustomCategories(current => [...current, response.data.data]); setForm(current => ({ ...current, category: response.data.data.name, type: response.data.data.type })); setCategoryForm({ name: '', type: 'EXPENSE' }); } catch (e) { setError(e); } }
   async function createBudget(e) { e.preventDefault(); try { await api.post('/budgets', { ...budgetForm, amount: Number(budgetForm.amount), category: budgetForm.category || null, periodType: 'MONTHLY' }); setBudgetForm({ name: 'Monthly spending', category: '', amount: '' }); await load(); } catch (e) { setError(e); } }
   async function createGoal(e) { e.preventDefault(); try { await api.post('/finance-goals', { ...goalForm, targetAmount: Number(goalForm.targetAmount) }); setGoalForm({ title: '', targetAmount: '', deadlineKey: '' }); await load(); } catch (e) { setError(e); } }
+  async function addContribution(goal) { const form = contributionForms[goal._id] || {}; try { await api.post(`/finance-goals/${goal._id}/contributions`, { amount: Number(form.amount), dateKey: form.dateKey || today(), note: form.note || undefined }); setContributionForms(current => ({ ...current, [goal._id]: { amount: '', dateKey: today(), note: '' } })); await load(); } catch (e) { setError(e); } }
   const total = summary?.totals?.find((x) => x._id === "EXPENSE")?.total || 0;
   const income = summary?.totals?.find((x) => x._id === "INCOME")?.total || 0;
   return (
@@ -183,6 +186,7 @@ export function FinancePage() {
         </form>
       </section>
       <div className="dashboard-columns"><section className="panel"><span className="eyebrow">OPTIONAL BUDGET</span><form className="grid-form" onSubmit={createBudget}><input required placeholder="Budget name" value={budgetForm.name} onChange={e => setBudgetForm({ ...budgetForm, name: e.target.value })} /><input placeholder="Category or blank for all" value={budgetForm.category} onChange={e => setBudgetForm({ ...budgetForm, category: e.target.value })} /><input type="number" min="0.01" required placeholder="Monthly amount" value={budgetForm.amount} onChange={e => setBudgetForm({ ...budgetForm, amount: e.target.value })} /><button>Set budget</button></form>{summary?.budgets?.map(item => <div className="goal-row" key={item._id}><div><strong>{item.name}</strong><small>Rs. {Number(item.spent).toLocaleString()} / {Number(item.amount).toLocaleString()}</small></div><div className="progress"><span style={{ width: `${Math.min(100, item.usagePercentage)}%` }} /></div></div>)}</section><section className="panel"><span className="eyebrow">CUSTOM CATEGORY</span><form className="grid-form" onSubmit={createCategory}><input required placeholder="Category name" value={categoryForm.name} onChange={e => setCategoryForm({ ...categoryForm, name: e.target.value })} /><select value={categoryForm.type} onChange={e => setCategoryForm({ ...categoryForm, type: e.target.value })}><option value="EXPENSE">Expense</option><option value="INCOME">Income</option></select><button>Create category</button></form><small>{customCategories.length} custom categories</small></section></div>
+      <section className="panel finance-goals-panel"><div className="row-between"><div><span className="eyebrow">FINANCIAL GOALS</span><p className="muted">Turn a target into a contribution plan and a visible history.</p></div><span className="muted">{summary?.financialGoals?.length || 0} goals</span></div><form className="grid-form" onSubmit={createGoal}><input required placeholder="Goal title, e.g. Buy laptop" value={goalForm.title} onChange={e => setGoalForm({ ...goalForm, title: e.target.value })} /><input type="number" min="0.01" required placeholder="Target amount" value={goalForm.targetAmount} onChange={e => setGoalForm({ ...goalForm, targetAmount: e.target.value })} /><input type="date" value={goalForm.deadlineKey} onChange={e => setGoalForm({ ...goalForm, deadlineKey: e.target.value })} /><button>Create goal</button></form>{summary?.financialGoals?.map(goal => { const progress = goal.progress || {}; const contribution = contributionForms[goal._id] || { amount: '', dateKey: today(), note: '' }; return <article className="finance-goal" key={goal._id}><div className="row-between"><div><strong>{goal.title}</strong><small>{goal.status} {goal.deadlineKey ? `· due ${goal.deadlineKey}` : '· no deadline'}</small></div><strong>{progress.percentageComplete || 0}%</strong></div><div className="progress"><span style={{ width: `${Math.min(100, progress.percentageComplete || 0)}%` }} /></div><div className="mini-row"><span>Saved</span><strong>Rs. {Number(progress.currentAmount || 0).toLocaleString()} / {Number(progress.targetAmount || goal.targetAmount || 0).toLocaleString()}</strong><small>{progress.amountRemaining > 0 ? `Rs. ${Number(progress.amountRemaining).toLocaleString()} remaining` : 'Target reached'}</small></div><div className="goal-metrics"><span>{progress.requiredWeeklyContribution == null ? 'Weekly plan unavailable' : `Rs. ${Math.round(progress.requiredWeeklyContribution).toLocaleString()}/week`}</span><span>{progress.requiredMonthlyContribution == null ? (progress.overdue ? 'Past deadline' : 'Monthly plan unavailable') : `Rs. ${Math.round(progress.requiredMonthlyContribution).toLocaleString()}/month`}</span><span>{progress.daysRemaining == null ? 'No days remaining' : `${progress.daysRemaining} days left`}</span></div><div className="inline-form goal-contribution-form"><input type="number" min="0.01" placeholder="Contribution" value={contribution.amount} onChange={e => setContributionForms(current => ({ ...current, [goal._id]: { ...contribution, amount: e.target.value } }))} /><input type="date" value={contribution.dateKey || today()} onChange={e => setContributionForms(current => ({ ...current, [goal._id]: { ...contribution, dateKey: e.target.value } }))} /><input placeholder="Note (optional)" value={contribution.note || ''} onChange={e => setContributionForms(current => ({ ...current, [goal._id]: { ...contribution, note: e.target.value } }))} /><button type="button" onClick={() => addContribution(goal)}>Add contribution</button></div>{progress.progressHistory?.length ? <div className="goal-history"><small className="eyebrow">CONTRIBUTION HISTORY</small>{progress.progressHistory.slice(-5).reverse().map(item => <div className="mini-row" key={item._id || `${item.dateKey}-${item.amount}`}><span>{item.dateKey}</span><strong>+Rs. {Number(item.amount).toLocaleString()}</strong><small>Rs. {Number(item.cumulativeAmount).toLocaleString()} total</small></div>)}</div> : <small className="muted">No contributions recorded yet.</small>}</article>; })}{!summary?.financialGoals?.length && <p className="muted">Create a savings target to start measuring financial progress.</p>}</section>
       <section className="panel"><div className="row-between"><span className="eyebrow">FILTER TRANSACTIONS</span><strong>Income Rs. {income.toLocaleString()}</strong></div><div className="inline-form"><input type="date" value={filters.startDateKey} onChange={e => setFilters({ ...filters, startDateKey: e.target.value })} /><input type="date" value={filters.endDateKey} onChange={e => setFilters({ ...filters, endDateKey: e.target.value })} /><select value={filters.type} onChange={e => setFilters({ ...filters, type: e.target.value })}><option value="">All types</option><option value="EXPENSE">Expenses</option><option value="INCOME">Income</option></select><button onClick={load}>Apply</button></div></section>
       <section className="panel"><div className="row-between"><span className="eyebrow">SPENDING TREND</span><small>{summary?.highestSpendingDay ? `Highest: ${summary.highestSpendingDay._id}` : "No spending yet"}</small></div><Chart data={summary?.trend || []} dataKey="total" color="#f1c36b" /></section>
       <section className="panel">
@@ -391,11 +395,11 @@ export function WorkPage() {
 
 export function AccountabilityHistoryPage() {
   const [items, setItems] = useState([]);
-  useEffect(() => {
-    api
-      .get("/spending-accountability/history")
-      .then((r) => setItems(r.data.data));
-  }, []);
+  const [metrics, setMetrics] = useState(null);
+  const [error, setError] = useState(null);
+  const [range, setRange] = useState(30);
+  async function load() { try { const end = shiftDateKey(today(), -1); const [history, summary] = await Promise.all([api.get("/spending-accountability/history"), api.get("/spending-accountability/summary", { params: { startDateKey: shiftDateKey(end, -(range - 1)), endDateKey: end } })]); setItems(history.data.data); setMetrics(summary.data.data.metrics); setError(null); } catch (e) { setError(e); } }
+  useEffect(() => { load(); }, [range]);
   return (
     <div>
       <Header
@@ -403,6 +407,9 @@ export function AccountabilityHistoryPage() {
         title="Spending history"
         description="A record of the days you explicitly accounted for, including zero-spending days."
       />
+      {error && <ErrorBox error={error} />}
+      <div className="grid accountability-metrics"><div className="card"><span className="eyebrow">ACCOUNTABILITY</span><strong>{metrics?.accountabilityRate ?? 0}%</strong><p className="muted">{metrics?.accountedDays || 0} of {metrics?.totalDays || 0} days</p></div><div className="card"><span className="eyebrow">CURRENT STREAK</span><strong>{metrics?.currentStreak || 0}</strong><p className="muted">Consecutive accounted days</p></div><div className="card"><span className="eyebrow">LONGEST STREAK</span><strong>{metrics?.longestStreak || 0}</strong><p className="muted">Best run in this window</p></div><div className="card"><span className="eyebrow">ZERO-SPEND DAYS</span><strong>{metrics?.zeroSpendingDays || 0}</strong><p className="muted">Explicitly recorded as zero</p></div></div>
+      <div className="actions"><select value={range} onChange={e => setRange(Number(e.target.value))}><option value="30">Last 30 days</option><option value="90">Last 90 days</option><option value="365">Last year</option></select><span className="muted">Average: Rs. {Math.round(metrics?.averageDailySpending || 0).toLocaleString()} per calendar day{metrics?.highestSpendingDay ? ` · Highest: Rs. ${Number(metrics.highestSpendingDay.totalSpent).toLocaleString()} on ${metrics.highestSpendingDay.dateKey}` : ''}</span></div>
       <section className="list">
         {items.map((item) => (
           <div className="list-row" key={item._id}>
@@ -668,8 +675,10 @@ export function ReviewsPage() {
 }
 
 export function SettingsPage() {
+  const dispatch = useDispatch();
   const [user, setUser] = useState(null);
   const [form, setForm] = useState({});
+  const [weights, setWeights] = useState({ task: 20, habit: 15, goal: 15, exercise: 10, timetable: 15, phone: 10, work: 15 });
   const [saved, setSaved] = useState(false);
   const [error, setError] = useState(null);
   useEffect(() => {
@@ -686,7 +695,10 @@ export function SettingsPage() {
           spendingAccountabilityRequired:
             r.data.data.settings?.spendingAccountabilityRequired ?? true,
           phoneTargetMinutes: r.data.data.settings?.phoneTargetMinutes || "",
+          weekStartsOn: r.data.data.settings?.weekStartsOn ?? "",
         });
+        const savedWeights = r.data.data.settings?.scoreWeights || {};
+        setWeights({ task: 20, habit: 15, goal: 15, exercise: 10, timetable: 15, phone: 10, work: 15, ...(savedWeights instanceof Map ? Object.fromEntries(savedWeights) : savedWeights) });
       })
       .catch(setError);
   }, []);
@@ -698,8 +710,11 @@ export function SettingsPage() {
         phoneTargetMinutes: form.phoneTargetMinutes
           ? Number(form.phoneTargetMinutes)
           : undefined,
+        weekStartsOn: form.weekStartsOn === "" || form.weekStartsOn === undefined ? undefined : Number(form.weekStartsOn),
+        scoreWeights: Object.fromEntries(Object.entries(weights).map(([key, value]) => [key, Number(value)])),
       });
       setUser(r.data.data);
+      dispatch(setAuthUser(r.data.data));
       setSaved(true);
     } catch (e) {
       setError(e);
@@ -720,6 +735,7 @@ export function SettingsPage() {
             value={form.name || ""}
             onChange={(e) => setForm({ ...form, name: e.target.value })}
           />
+          <input type="number" min="0" max="6" placeholder="Week starts on (0 Sunday - 6 Saturday)" value={form.weekStartsOn ?? ""} onChange={e => setForm({ ...form, weekStartsOn: e.target.value })} />
           <input
             placeholder="Timezone"
             value={form.timezone || ""}
@@ -772,6 +788,7 @@ export function SettingsPage() {
           </label>
           <button>Save settings</button>
         </form>
+        <div className="settings-weights"><div className="row-between"><div><span className="eyebrow">PRODUCTIVITY WEIGHTS</span><p className="muted">The backend normalizes these weights when a component has no applicable data.</p></div><strong>{Object.values(weights).reduce((sum, value) => sum + Number(value || 0), 0)}%</strong></div><div className="weight-grid">{Object.entries(weights).map(([key, value]) => <label key={key}>{key}<input type="number" min="0" max="100" value={value} onChange={e => setWeights(current => ({ ...current, [key]: e.target.value }))} /></label>)}</div></div>
         {saved && <p className="success">Settings saved.</p>}
         <p className="muted">
           Accountability requirements remain backend-enforced.

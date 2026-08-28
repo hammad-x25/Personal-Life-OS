@@ -1,6 +1,6 @@
 import { z } from 'zod';
 
-const dateKey = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Use YYYY-MM-DD');
+const dateKey = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Use YYYY-MM-DD').superRefine((value, ctx) => { const [year, month, day] = value.split('-').map(Number); const parsed = new Date(Date.UTC(year, month - 1, day, 12)); if (parsed.getUTCFullYear() !== year || parsed.getUTCMonth() !== month - 1 || parsed.getUTCDate() !== day) ctx.addIssue({ code: z.ZodIssueCode.custom, message: 'Use a real calendar date' }); });
 const positive = z.coerce.number().min(0, 'Must be zero or greater');
 export const registerSchema = z.object({ name: z.string().trim().min(2).max(80), email: z.string().email(), password: z.string().min(8).max(128), timezone: z.string().trim().min(1).max(80).optional() });
 export const loginSchema = z.object({ email: z.string().email(), password: z.string().min(1).max(128) });

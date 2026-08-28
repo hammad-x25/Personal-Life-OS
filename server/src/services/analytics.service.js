@@ -14,6 +14,7 @@ import HabitLog from '../models/HabitLog.js';
 import { isHabitScheduledDate } from '../utils/habit-schedule.js';
 import { dateKeyInTimezone, dateKeysBetween, shiftDateKey, weekPeriod, monthPeriod, yearPeriod } from '../utils/dates.js';
 import { calculateDailyScore } from './score.service.js';
+import { financialGoalWithProgress } from './finance-goal.service.js';
 
 export async function dashboardToday(user) {
   const dateKey = dateKeyInTimezone(new Date(), user.timezone);
@@ -51,13 +52,14 @@ export async function financeSummary(user, startDateKey, endDateKey) {
     Expense.aggregate([{ $match: { ...match, type: 'EXPENSE' } }, { $group: { _id: '$dateKey', total: { $sum: '$amount' } } }, { $sort: { _id: 1 } }]),
     SpendingAccountability.countDocuments({ userId: user._id, dateKey: { $gte: startDateKey, $lte: endDateKey }, status: 'ACCOUNTED' }),
     Budget.find({ userId: user._id, active: true, deletedAt: null }).select('name category amount currency periodType'),
-    FinancialGoal.find({ userId: user._id, status: { $in: ['ACTIVE', 'COMPLETED'] }, deletedAt: null }).select('title targetAmount currentAmount currency deadlineKey status')
+    FinancialGoal.find({ userId: user._id, status: { $in: ['ACTIVE', 'COMPLETED'] }, deletedAt: null }).select('title targetAmount currentAmount currency deadlineKey status contributions')
   ]);
   const expenseTotal = totals.find(item => item._id === 'EXPENSE')?.total || 0;
   const incomeTotal = totals.find(item => item._id === 'INCOME')?.total || 0;
   const highestSpendingDay = trend.reduce((highest, item) => !highest || item.total > highest.total ? item : highest, null);
   const budgetRows = budgets.map(budget => { const spent = budget.category ? (categories.find(item => item._id === budget.category)?.total || 0) : expenseTotal; return { ...budget.toObject(), spent, remaining: budget.amount - spent, usagePercentage: budget.amount ? spent / budget.amount * 100 : 0 }; });
-  return { totals, categories, trend, accountabilityDays: accountability, budgets: budgetRows, financialGoals, netBalance: incomeTotal - expenseTotal, averageDailySpending: trend.length ? expenseTotal / trend.length : 0, highestSpendingDay, highestSpendingCategory: categories[0] || null };
+  const todayDateKey = dateKeyInTimezone(new Date(), user.timezone);
+  return { totals, categories, trend, accountabilityDays: accountability, budgets: budgetRows, financialGoals: financialGoals.map(goal => financialGoalWithProgress(goal, todayDateKey)), netBalance: incomeTotal - expenseTotal, averageDailySpending: trend.length ? expenseTotal / trend.length : 0, highestSpendingDay, highestSpendingCategory: categories[0] || null };
 }
 
 export async function dashboardPeriod(user, type, customPeriod = null) {

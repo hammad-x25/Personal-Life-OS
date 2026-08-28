@@ -29,12 +29,13 @@ function useResource(endpoint) {
     await api.post(endpoint, data);
     await load();
   }
+  const baseEndpoint = endpoint.split("?")[0];
   async function update(id, data) {
-    await api.patch(`${endpoint}/${id}`, data);
+    await api.patch(baseEndpoint + "/" + id, data);
     await load();
   }
   async function remove(id) {
-    await api.delete(`${endpoint}/${id}`);
+    await api.delete(baseEndpoint + "/" + id);
     await load();
   }
   return { items, loading, error, create, update, remove, reload: load };
@@ -168,9 +169,14 @@ function Card({ label, value, detail }) {
 }
 
 export function TasksPage() {
-  const resource = useResource("/tasks");
+  const [view, setView] = useState("TODAY");
+  const resource = useResource("/tasks?view=" + view);
+  const [actualMinutes, setActualMinutes] = useState({});
     const [form, setForm] = useState({
       title: "",
+      description: "",
+      category: "",
+      estimatedMinutes: "",
       priority: "MEDIUM",
       dueDateKey: dateKey(),
       recurrenceType: "NONE",
@@ -178,8 +184,13 @@ export function TasksPage() {
     async function add(e) {
     e.preventDefault();
     if (!form.title.trim()) return;
-      await resource.create({ title: form.title, priority: form.priority, dueDateKey: form.dueDateKey, recurrence: { type: form.recurrenceType } });
+      try { await resource.create({ title: form.title, description: form.description || undefined, category: form.category || undefined, estimatedMinutes: form.estimatedMinutes ? Number(form.estimatedMinutes) : undefined, priority: form.priority, dueDateKey: form.dueDateKey, recurrence: { type: form.recurrenceType } }); } catch {}
       setForm({ ...form, title: "" });
+    }
+    async function changeStatus(task, status) {
+      try {
+        await resource.update(task._id, { status, actualMinutes: actualMinutes[task._id] ? Number(actualMinutes[task._id]) : undefined });
+      } catch {}
     }
   return (
     <div>
@@ -195,6 +206,9 @@ export function TasksPage() {
             value={form.title}
             onChange={(e) => setForm({ ...form, title: e.target.value })}
           />
+          <input placeholder="Description (optional)" value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} />
+          <input placeholder="Category" value={form.category} onChange={(e) => setForm({ ...form, category: e.target.value })} />
+          <input type="number" min="0" placeholder="Estimate (min)" value={form.estimatedMinutes} onChange={(e) => setForm({ ...form, estimatedMinutes: e.target.value })} />
           <select
             value={form.priority}
             onChange={(e) => setForm({ ...form, priority: e.target.value })}
@@ -216,6 +230,7 @@ export function TasksPage() {
             <button>Add task</button>
         </form>
       </section>
+      <div className="task-views">{["ALL", "OVERDUE", "TODAY", "UPCOMING", "COMPLETED"].map((item) => <button key={item} className={view === item ? "" : "secondary"} onClick={() => setView(item)}>{item[0] + item.slice(1).toLowerCase()}</button>)}</div>
       <ErrorMessage error={resource.error} />
       <section className="list">
         {resource.loading ? (
@@ -228,22 +243,18 @@ export function TasksPage() {
             >
               <button
                 className="check"
-                onClick={() =>
-                  resource.update(task._id, {
-                    status: task.status === "COMPLETED" ? "TODO" : "COMPLETED",
-                    completedAt:
-                      task.status === "COMPLETED" ? null : new Date(),
-                  })
-                }
+                  onClick={() => changeStatus(task, task.status === "COMPLETED" ? "TODO" : "COMPLETED")}
               >
                 {task.status === "COMPLETED" ? "✓" : ""}
               </button>
               <div className="row-main">
                 <strong>{task.title}</strong>
                 <small>
-                  {task.priority} · Due {task.dueDateKey || "—"}
+                  {task.priority} · Due {task.dueDateKey || "—"}{task.estimatedMinutes ? ` · Est. ${task.estimatedMinutes}m` : ""}
                 </small>
               </div>
+              <input className="task-duration" type="number" min="0" placeholder="Actual min" value={actualMinutes[task._id] || ""} onChange={(e) => setActualMinutes({ ...actualMinutes, [task._id]: e.target.value })} />
+              <select className="task-status" value={task.status} onChange={(e) => changeStatus(task, e.target.value)}><option value="TODO">Todo</option><option value="IN_PROGRESS">In progress</option><option value="COMPLETED">Completed</option><option value="DEFERRED">Deferred</option><option value="CANCELLED">Cancelled</option></select>
               <button
                 className="icon-button"
                 onClick={() => resource.remove(task._id)}

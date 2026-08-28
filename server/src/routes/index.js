@@ -69,6 +69,7 @@ router.post(
 );
 router.get("/check-ins/history", asyncHandler(access.phoneHistory));
 router.get("/spending-accountability/history", asyncHandler(access.spendingHistory));
+router.get("/spending-accountability/summary", asyncHandler(access.spendingSummary));
 router.get(
   "/spending-accountability/:dateKey/preview",
   asyncHandler(access.spendingPreview),
